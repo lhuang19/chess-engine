@@ -43,6 +43,7 @@ library
       Lib
       -- if you add modules to your project, list them here
       -- so that they will be available to the executable and test suite
+      Syntax
   hs-source-dirs:
       src
 
@@ -57,6 +58,13 @@ executable project-cis5520-exe
   build-depends:
       project-cis5520
 
+executable FENCliParser
+  import:
+    common-stanza
+  main-is: FENCliParser.hs
+  hs-source-dirs: app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends: project-cis5520
 
 test-suite project-cis5520-test
   import:
