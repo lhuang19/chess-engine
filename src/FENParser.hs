@@ -1,14 +1,13 @@
 module FENParser where
 
 import Control.Applicative
-import Data.Char (isAlpha, isAlphaNum)
 import Data.Char qualified as Char
 import Data.Functor (($>))
 import Data.List qualified as List
 import Syntax
 import Parser (Parser)
 import Parser qualified as P
-import Test.HUnit (Assertion, Counts, Test (..), assert, runTestTT, (~:), (~?=))
+import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 
 constP :: Char -> a -> Parser a
 constP s x = P.char s $> x

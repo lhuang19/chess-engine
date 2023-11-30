@@ -1,6 +1,7 @@
 module Main where
 
 import Lib
+import Syntax
 
 main :: IO ()
 main = do
@@ -8,3 +9,6 @@ main = do
   putStrLn "Testing Syntax"
   putStrLn someFunc
   putStrLn $ pretty wBoard1
+  putStrLn $ pretty wPosition1
+  putStrLn "Testing Syntax"
+

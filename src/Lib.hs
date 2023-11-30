@@ -1,13 +1,11 @@
 module Lib
     ( someFunc,
-      S.pretty,
-      S.wBoard1,
-      P.parseBoard,
-      P.parseFEN
+      module Syntax,
+      module FENParser,
     ) where
 
-import qualified Syntax as S
-import qualified FENParser as P
+import qualified Syntax
+import qualified FENParser
 
 
 someFunc :: String
