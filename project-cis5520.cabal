@@ -48,6 +48,7 @@ library
       CommonParser
       MoveParser
       Parser
+      Moves
   hs-source-dirs:
       src
 

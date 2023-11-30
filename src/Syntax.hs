@@ -12,7 +12,6 @@ module Syntax
     Castling (..),
     Coordinate (..),
     Position (..),
-    MoveInput (..),
     StandardMove (..),
     Capture (..),
     Castle (..),
@@ -21,6 +20,11 @@ module Syntax
     Move (..),
     Game (..),
     PP (..),
+    annotatedBoard,
+    predFile,
+    succFile,
+    predRank,
+    succRank,
     )
 
 where
@@ -35,8 +39,18 @@ data Piece = Pawn | Knight | Bishop | Rook | Queen | King deriving (Show, Eq)
 data Color = White | Black deriving (Show, Eq)
 data Square = Empty | Occupied Color Piece deriving (Show, Eq)
 
-data File = A | B | C | D | E | F | G | H deriving (Show, Eq)
-data Rank = R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 deriving (Show, Eq)
+data File = A | B | C | D | E | F | G | H deriving (Show, Eq, Enum, Bounded)
+data Rank = R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 deriving (Show, Eq, Enum, Bounded)
+
+annotatedBoard :: Board -> [(Coordinate, Square)]
+annotatedBoard (Board rows) =
+  concat
+  $ zipWith (\i (Row squares)->
+     zipWith (\j square ->
+                (Coordinate j i, square)
+             ) [A ..  H]
+     squares) [R1 .. R8]
+    rows
 
 data Castling = Castling
   { whiteKingSide :: Bool
@@ -59,17 +73,7 @@ data Position = Position
   , fullMoveNumber :: Int
   } deriving (Show, Eq)
 
--- everything beside castling 
-data MoveInput = MoveInput
-  (Maybe Piece)
-  (Maybe Rank)
-  (Maybe File)
-  (Maybe ()) -- capture
-  Coordinate
-  (Maybe ()) -- equals sign
-  (Maybe Piece) -- promotion
-  (Maybe ()) -- en passant
-  deriving (Show, Eq)
+-- Assume user puts in relatively well formed data
 
 data StandardMove = StandardMove Piece Coordinate Coordinate deriving (Show, Eq)
 
@@ -92,6 +96,49 @@ data Game = Game
   { position :: Position
   , previousPosition :: Position
   } deriving (Show, Eq)
+
+-- functions on data types
+predFile, succFile :: File -> Maybe File
+predFile f = case f of
+  A -> Nothing
+  B -> Just A
+  C -> Just B
+  D -> Just C
+  E -> Just D
+  F -> Just E
+  G -> Just F
+  H -> Just G
+
+succFile f = case f of
+  H -> Nothing
+  G -> Just H
+  F -> Just G
+  E -> Just F
+  D -> Just E
+  C -> Just D
+  B -> Just C
+  A -> Just B
+
+predRank, succRank :: Rank -> Maybe Rank
+predRank r = case r of
+  R1 -> Nothing
+  R2 -> Just R1
+  R3 -> Just R2
+  R4 -> Just R3
+  R5 -> Just R4
+  R6 -> Just R5
+  R7 -> Just R6
+  R8 -> Just R7
+
+succRank r = case r of
+  R8 -> Nothing
+  R7 -> Just R8
+  R6 -> Just R7
+  R5 -> Just R6
+  R4 -> Just R5
+  R3 -> Just R4
+  R2 -> Just R3
+  R1 -> Just R2
 
 -- test1
 wBoard1 :: Board
