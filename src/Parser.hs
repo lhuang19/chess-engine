@@ -3,10 +3,11 @@
 -- All `Parser`s must be built using the following functions
 -- exported by this file, as well as the `Functor`, `Applicative` and
 -- `Alternative` operations.
-module Parser(Parser, doParse, get, eof, filter, 
+module Parser(Parser(P), doParse, get, eof, filter, 
                           parse, parseFromFile, ParseError,
                           satisfy, alpha, digit, upper, lower, space,
-                          char, string, int,
+                          satisfy', alpha', digit', upper', lower', space',
+                          char, char', string, int,
                           chainl1, chainl, choice,
                           between, sepBy1, sepBy) where
 
@@ -60,6 +61,12 @@ get = P $ \s -> case s of
                    (c : cs) -> Just (c, cs) 
                    []       -> Nothing
 
+-- | Return the next character from the input without consuming it
+peek :: Parser Char
+peek = P $ \s -> case s of
+                   (c : cs) -> Just (c, c:cs) 
+                   []       -> Nothing
+
 -- | This parser *only* succeeds at the end of the input.
 eof :: Parser ()
 eof = P $ \s -> case s of
@@ -108,6 +115,9 @@ parseFromFile parser filename = do
 satisfy :: (Char -> Bool) -> Parser Char
 satisfy p = filter p get
 
+satisfy' :: (Char -> Bool) -> Parser Char
+satisfy' p = filter p peek
+
 -- | Parsers for specific sorts of characters
 alpha, digit, upper, lower, space :: Parser Char
 alpha = satisfy isAlpha
@@ -116,10 +126,21 @@ upper = satisfy isUpper
 lower = satisfy isLower
 space = satisfy isSpace
 
+alpha', digit', upper', lower', space' :: Parser Char
+alpha' = satisfy' isAlpha
+digit' = satisfy' isDigit
+upper' = satisfy' isUpper
+lower' = satisfy' isLower
+space' = satisfy' isSpace
+
 -- | Parses and returns the specified character
 -- succeeds only if the input is exactly that character
 char :: Char -> Parser Char
 char c = satisfy (c ==)
+
+-- | case insensitive version of `char`
+char' :: Char -> Parser Char
+char' c = satisfy (\x -> toLower x == toLower c)
 
 -- | Parses and returns the specified string.
 -- Succeeds only if the input is the given string

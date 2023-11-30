@@ -10,6 +10,9 @@ data Piece = Pawn | Knight | Bishop | Rook | Queen | King deriving (Show, Eq)
 data Color = White | Black deriving (Show, Eq)
 data Square = Empty | Occupied Color Piece deriving (Show, Eq)
 
+data File = A | B | C | D | E | F | G | H deriving (Show, Eq)
+data Rank = One | Two | Three | Four | Five | Six | Seven | Eight deriving (Show, Eq)
+
 data Castling = Castling
   { whiteKingSide :: Bool
   , whiteQueenSide :: Bool
@@ -18,8 +21,8 @@ data Castling = Castling
   } deriving (Show, Eq)
 
 data Coordinate = Coordinate
-  { file :: Char
-  , rank :: Int
+  { file :: File
+  , rank :: Rank
   } deriving (Show, Eq)
 
 
@@ -75,3 +78,43 @@ instance PP Row where
 
 instance PP Board where
   pp (Board xs) = PP.vcat (map (\x -> pp x <+> PP.char '\n') xs)
+
+instance PP Castling where
+  pp (Castling wk wq bk bq) = PP.text "Castling" <+> PP.text (show wk) <+> PP.text (show wq) <+> PP.text (show bk) <+> PP.text (show bq)
+
+instance PP File where
+  pp A = PP.char 'a'
+  pp B = PP.char 'b'
+  pp C = PP.char 'c'
+  pp D = PP.char 'd'
+  pp E = PP.char 'e'
+  pp F = PP.char 'f'
+  pp G = PP.char 'g'
+  pp H = PP.char 'h'
+
+instance PP Rank where
+  pp One = PP.char '1'
+  pp Two = PP.char '2'
+  pp Three = PP.char '3'
+  pp Four = PP.char '4'
+  pp Five = PP.char '5'
+  pp Six = PP.char '6'
+  pp Seven = PP.char '7'
+  pp Eight = PP.char '8'
+
+instance PP Coordinate where
+  pp (Coordinate f r) = pp f PP.<> pp r
+
+instance PP (Maybe Coordinate) where
+  pp Nothing = PP.text "none"
+  pp (Just c) = pp c
+
+instance PP Position where
+  pp (Position b t c e h f) =
+    PP.text "Position"
+    <+> pp b
+    <+> pp t
+    <+> pp c
+    <+> pp e
+    <+> PP.int h
+    <+> PP.int f
