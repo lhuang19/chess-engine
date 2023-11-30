@@ -9,7 +9,9 @@ module Parser(Parser(P), doParse, get, eof, filter,
                           satisfy', alpha', digit', upper', lower', space',
                           char, char', string, int,
                           chainl1, chainl, choice,
-                          between, sepBy1, sepBy) where
+                          between, sepBy1, sepBy,
+                          optional
+                          ) where
 
 import Prelude hiding (filter)
 
@@ -191,3 +193,6 @@ sepBy1 :: Parser a -> Parser sep -> Parser [a]
 sepBy1 p sep = (:) <$> p <*> many (sep *> p)
 
 ---------------------------------------------
+
+optional :: Parser a -> Parser (Maybe a)
+optional p = Just <$> p <|> pure Nothing

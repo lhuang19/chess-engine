@@ -12,7 +12,12 @@ module Syntax
     Castling (..),
     Coordinate (..),
     Position (..),
-    MoveI (..),
+    MoveInput (..),
+    StandardMove (..),
+    Capture (..),
+    Castle (..),
+    EnPassant (..),
+    Promotion (..),
     Move (..),
     Game (..),
     PP (..),
@@ -31,7 +36,7 @@ data Color = White | Black deriving (Show, Eq)
 data Square = Empty | Occupied Color Piece deriving (Show, Eq)
 
 data File = A | B | C | D | E | F | G | H deriving (Show, Eq)
-data Rank = One | Two | Three | Four | Five | Six | Seven | Eight deriving (Show, Eq)
+data Rank = R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 deriving (Show, Eq)
 
 data Castling = Castling
   { whiteKingSide :: Bool
@@ -45,7 +50,6 @@ data Coordinate = Coordinate
   , rank :: Rank
   } deriving (Show, Eq)
 
-
 data Position = Position
   { board :: Board
   , turn :: Color
@@ -55,20 +59,34 @@ data Position = Position
   , fullMoveNumber :: Int
   } deriving (Show, Eq)
 
-data MoveI = AlegraicNotation
-  { pieceI :: Maybe Piece
-  , fileI :: Maybe File
-  , rankI :: Maybe Rank
-  , destinationI :: Maybe Coordinate
-  , promotionI :: Maybe Piece
-  } deriving (Show, Eq)
+-- everything beside castling 
+data MoveInput = MoveInput
+  (Maybe Piece)
+  (Maybe Rank)
+  (Maybe File)
+  (Maybe ()) -- capture
+  Coordinate
+  (Maybe ()) -- equals sign
+  (Maybe Piece) -- promotion
+  (Maybe ()) -- en passant
+  deriving (Show, Eq)
 
-data Move = Move
-  { piece :: Piece
-  , from :: Coordinate
-  , to :: Coordinate
-  , promotion :: Maybe Piece
-  } deriving (Show, Eq)
+data StandardMove = StandardMove Piece Coordinate Coordinate deriving (Show, Eq)
+
+data Capture = Capture Piece Coordinate Coordinate deriving (Show, Eq)
+
+data Castle = KingsideCastle | QueensideCastle deriving (Show, Eq)
+
+data EnPassant = EnPassant Coordinate deriving (Show, Eq)
+
+data Promotion = Promotion Coordinate Piece deriving (Show, Eq)
+
+data Move
+  = StdMove StandardMove
+  | CapMove Capture
+  | CastMove Castle
+  | PromMove Promotion
+  deriving (Show, Eq)
 
 data Game = Game
   { position :: Position
@@ -162,14 +180,14 @@ instance PP File where
   pp H = PP.char 'h'
 
 instance PP Rank where
-  pp One = PP.char '1'
-  pp Two = PP.char '2'
-  pp Three = PP.char '3'
-  pp Four = PP.char '4'
-  pp Five = PP.char '5'
-  pp Six = PP.char '6'
-  pp Seven = PP.char '7'
-  pp Eight = PP.char '8'
+  pp R1 = PP.char '1'
+  pp R2 = PP.char '2'
+  pp R3 = PP.char '3'
+  pp R4 = PP.char '4'
+  pp R5 = PP.char '5'
+  pp R6 = PP.char '6'
+  pp R7 = PP.char '7'
+  pp R8 = PP.char '8'
 
 instance PP Coordinate where
   pp (Coordinate f r) = pp f PP.<> pp r
