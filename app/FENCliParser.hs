@@ -1,8 +1,7 @@
 module Main where
 
-import Lib
 import FENParser
-import Syntax
+import Print
  
 main :: IO ()
 main = do

@@ -1,15 +1,12 @@
 module Lib
-    ( someFunc,
-      module Syntax,
+    ( module CommonParser,
       module FENParser,
-      module CommonParser
+      module Print,
+      module Syntax
     ) where
 
-import qualified Syntax
-import qualified FENParser
 import qualified CommonParser
-
-
-someFunc :: String
-someFunc = "Hello CIS 5520"
+import qualified FENParser
+import qualified Print
+import qualified Syntax
 

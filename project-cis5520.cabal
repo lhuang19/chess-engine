@@ -49,6 +49,7 @@ library
       MoveParser
       Parser
       Moves
+      Print
   hs-source-dirs:
       src
 
