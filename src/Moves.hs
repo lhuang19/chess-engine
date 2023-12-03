@@ -5,7 +5,8 @@ module Moves (
   bishopMoves,
   rookMoves,
   queenMoves,
-  kingMoves
+  kingMoves,
+  test_all
 ) where
 
 import Data.Maybe (maybeToList, isJust)
@@ -65,7 +66,7 @@ iterateM f x = x : maybe [] (iterateM f) (f x)
 
 bishopMoves :: Coordinate -> [Coordinate]
 bishopMoves (Coordinate f r) =
-  filter (\(Coordinate f' r') -> f' /= f && r' /= r) $
+  filter (\(Coordinate f' r') -> f' /= f || r' /= r) $
   concat
     [ movesInDirection succFile succRank
     , movesInDirection succFile predRank
@@ -80,6 +81,7 @@ bishopMoves (Coordinate f r) =
 
 rookMoves :: Coordinate -> [Coordinate]
 rookMoves (Coordinate f r) =
+  filter (\(Coordinate f' r') -> f' /= f || r' /= r) $
   concat
     [ movesInFile succFile
     , movesInFile predFile
@@ -105,6 +107,10 @@ kingMoves (Coordinate f r) =
     , movesInFile predFile
     , movesInRank succRank
     , movesInRank predRank
+    , movesInDirection succFile succRank
+    , movesInDirection succFile predRank
+    , movesInDirection predFile succRank
+    , movesInDirection predFile predRank
     ]
   where
     movesInFile:: (File -> Maybe File) -> [Coordinate]
@@ -114,6 +120,13 @@ kingMoves (Coordinate f r) =
     movesInRank :: (Rank -> Maybe Rank) -> [Coordinate]
     movesInRank nextRank =
       map (Coordinate f) $ maybeToList (nextRank r)
+
+    movesInDirection :: (File -> Maybe File) -> (Rank -> Maybe Rank) -> [Coordinate]
+    movesInDirection nextFile nextRank =
+      map (uncurry Coordinate) $ maybeToList $ do
+        f' <- nextFile f
+        r' <- nextRank r
+        return (f', r')
 
 test_pawn :: Test
 test_pawn =
@@ -189,40 +202,117 @@ test_rook =
   TestList
     [ rookMoves (Coordinate A R1) ~?=
       [
-        Coordinate A R2,
-        Coordinate A R3,
-        Coordinate A R4,
-        Coordinate A R5,
-        Coordinate A R6,
-        Coordinate A R7,
-        Coordinate A R8,
         Coordinate B R1,
         Coordinate C R1,
         Coordinate D R1,
         Coordinate E R1,
         Coordinate F R1,
         Coordinate G R1,
-        Coordinate H R1
+        Coordinate H R1,
+        Coordinate A R2,
+        Coordinate A R3,
+        Coordinate A R4,
+        Coordinate A R5,
+        Coordinate A R6,
+        Coordinate A R7,
+        Coordinate A R8
       ],
       rookMoves (Coordinate D R4) ~?=
       [
-        Coordinate D R5,
-        Coordinate D R6,
-        Coordinate D R7,
-        Coordinate D R8,
         Coordinate E R4,
         Coordinate F R4,
         Coordinate G R4,
         Coordinate H R4,
-        Coordinate D R3,
-        Coordinate D R2,
-        Coordinate D R1,
         Coordinate C R4,
         Coordinate B R4,
-        Coordinate A R4
+        Coordinate A R4,
+        Coordinate D R5,
+        Coordinate D R6,
+        Coordinate D R7,
+        Coordinate D R8,
+        Coordinate D R3,
+        Coordinate D R2,
+        Coordinate D R1
       ]
     ]
 
+test_queen :: Test
+test_queen =
+  "queen moves" ~:
+  TestList
+    [ queenMoves (Coordinate A R1) ~?=
+      [
+        Coordinate B R2,
+        Coordinate C R3,
+        Coordinate D R4,
+        Coordinate E R5,
+        Coordinate F R6,
+        Coordinate G R7,
+        Coordinate H R8,
+        Coordinate B R1,
+        Coordinate C R1,
+        Coordinate D R1,
+        Coordinate E R1,
+        Coordinate F R1,
+        Coordinate G R1,
+        Coordinate H R1,
+        Coordinate A R2,
+        Coordinate A R3,
+        Coordinate A R4,
+        Coordinate A R5,
+        Coordinate A R6,
+        Coordinate A R7,
+        Coordinate A R8
+      ],
+      queenMoves (Coordinate D R4) ~?=
+      [
+          Coordinate E R5,
+          Coordinate F R6,
+          Coordinate G R7,
+          Coordinate H R8,
+          Coordinate E R3,
+          Coordinate F R2,
+          Coordinate G R1,
+          Coordinate C R5,
+          Coordinate B R6,
+          Coordinate A R7,
+          Coordinate C R3,
+          Coordinate B R2,
+          Coordinate A R1,
+          Coordinate E R4,
+          Coordinate F R4,
+          Coordinate G R4,
+          Coordinate H R4,
+          Coordinate C R4,
+          Coordinate B R4,
+          Coordinate A R4,
+          Coordinate D R5,
+          Coordinate D R6,
+          Coordinate D R7,
+          Coordinate D R8,
+          Coordinate D R3,
+          Coordinate D R2,
+          Coordinate D R1
+      ]
+    ]
+
+test_king :: Test
+test_king =
+  "king moves" ~:
+  TestList
+    [ kingMoves (Coordinate A R1) ~?= [Coordinate B R1,  Coordinate A R2, Coordinate B R2]
+    , kingMoves (Coordinate D R4) ~?=
+      [
+        Coordinate E R4,
+        Coordinate C R4,
+        Coordinate D R5,
+        Coordinate D R3,
+        Coordinate E R5,
+        Coordinate E R3,
+        Coordinate C R5,
+        Coordinate C R3
+      ]
+    ]
 
 test_all :: IO Counts
 test_all = runTestTT $ TestList
@@ -230,7 +320,9 @@ test_all = runTestTT $ TestList
     test_pawn,
     test_knight,
     test_bishop,
-    test_rook
+    test_rook,
+    test_queen,
+    test_king
   ]
 
 
