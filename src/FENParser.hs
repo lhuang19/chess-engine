@@ -8,57 +8,58 @@ import Syntax
 import Parser (Parser)
 import Parser qualified as P
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
+import CommonParser
 
-constP :: Char -> a -> Parser a
-constP s x = P.char s $> x
+-- constP :: Char -> a -> Parser a
+-- constP s x = P.char s $> x
 
-constP' :: Char -> a -> Parser a
-constP' s x = P.char' s $> x
+-- constP' :: Char -> a -> Parser a
+-- constP' s x = P.char' s $> x
 
-pieceP :: Parser Piece
-pieceP =
-  constP' 'p' Pawn
-  <|> constP' 'n' Knight
-  <|> constP' 'b' Bishop
-  <|> constP' 'r' Rook
-  <|> constP' 'q' Queen
-  <|> constP' 'k' King
+-- pieceP :: Parser Piece
+-- pieceP =
+--   constP' 'p' Pawn
+--   <|> constP' 'n' Knight
+--   <|> constP' 'b' Bishop
+--   <|> constP' 'r' Rook
+--   <|> constP' 'q' Queen
+--   <|> constP' 'k' King
 
-colorPeekP :: Parser Color
-colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha'
+-- colorPeekP :: Parser Color
+-- colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha'
 
-emptySquaresP :: Parser [Square]
-emptySquaresP =
-  (`replicate` Empty)
-  <$> P.filter (\n -> n <= 8 && n >= 1) P.int
+-- emptySquaresP :: Parser [Square]
+-- emptySquaresP =
+--   (`replicate` Empty)
+--   <$> P.filter (\n -> n <= 8 && n >= 1) P.int
 
-occupiedSquareP :: Parser Square
-occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
+-- occupiedSquareP :: Parser Square
+-- occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
 
-fileP :: Parser File
-fileP =
-  constP 'a' A
-  <|> constP 'b' B
-  <|> constP 'c' C
-  <|> constP 'd' D
-  <|> constP 'e' E
-  <|> constP 'f' F
-  <|> constP 'g' G
-  <|> constP 'h' H
+-- fileP :: Parser File
+-- fileP =
+--   constP 'a' A
+--   <|> constP 'b' B
+--   <|> constP 'c' C
+--   <|> constP 'd' D
+--   <|> constP 'e' E
+--   <|> constP 'f' F
+--   <|> constP 'g' G
+--   <|> constP 'h' H
 
-rankP :: Parser Rank
-rankP =
-  constP '1' One
-  <|> constP '2' Two
-  <|> constP '3' Three
-  <|> constP '4' Four
-  <|> constP '5' Five
-  <|> constP '6' Six
-  <|> constP '7' Seven
-  <|> constP '8' Eight
+-- rankP :: Parser Rank
+-- rankP =
+--   constP '1' R1
+--   <|> constP '2' R2
+--   <|> constP '3' R3
+--   <|> constP '4' R4
+--   <|> constP '5' R5
+--   <|> constP '6' R6
+--   <|> constP '7' R7
+--   <|> constP '8' R8
 
-coordinateP :: Parser Coordinate
-coordinateP = Coordinate <$> fileP <*> rankP
+-- coordinateP :: Parser Coordinate
+-- coordinateP = Coordinate <$> fileP <*> rankP
 
 -- | parsers
 
@@ -239,7 +240,7 @@ test_enPassant =
   "parsing enPassant"
   ~: TestList
   [ P.parse enPassantP "-" ~?= Right Nothing,
-    P.parse enPassantP "a1" ~?= Right (Just (Coordinate A One)),
+    P.parse enPassantP "a1" ~?= Right (Just (Coordinate A R1)),
     P.parse enPassantP "a" ~?= Left "No parses"
   ]
 

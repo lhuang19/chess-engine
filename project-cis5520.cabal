@@ -45,7 +45,10 @@ library
       -- so that they will be available to the executable and test suite
       Syntax
       FENParser
+      CommonParser
+      MoveParser
       Parser
+      Moves
   hs-source-dirs:
       src
 
