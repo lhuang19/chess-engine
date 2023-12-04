@@ -43,18 +43,38 @@ applyMove move pos = case move of
 
 applyStandardMove :: StandardMove -> Position -> Position
 applyStandardMove (StandardMove piece from to) pos = do
-  let b = board pos
-  let b' = updateBoard b from Empty
-  let b'' = updateBoard b' to (Occupied (turnColor $ turn pos) piece)
-  pos { board = b'', turn = switchColor (turn pos) }
+  \b -> pos { board = b, turn = switchColor (turn pos) }
+  $ updateBoard from Empty
+  $ updateBoard to (Occupied (turnColor $ turn pos) piece)
+  $ board pos
 
 applyCastleMove :: Castle -> Position -> Position
-applyCastleMove Kingside pos = undefined
+applyCastleMove Kingside pos = do
+  \b -> pos { board = b, turn = switchColor (turn pos) }
+  $ updateBoard (Coordinate E r) Empty
+  $ updateBoard (Coordinate H r) Empty
+  $ updateBoard (Coordinate F r) (Occupied (turnColor $ turn pos) King)
+  $ updateBoard (Coordinate G r) (Occupied (turnColor $ turn pos) Rook)
+  $ board pos
+  where
+    r = if turn pos == White then R1 else R8
 
-applyCastleMove Queenside pos = undefined
+applyCastleMove Queenside pos = do
+  \b -> pos { board = b, turn = switchColor (turn pos) }
+  $ updateBoard (Coordinate E r) Empty
+  $ updateBoard (Coordinate A r) Empty
+  $ updateBoard (Coordinate C r) (Occupied (turnColor $ turn pos) King)
+  $ updateBoard (Coordinate D r) (Occupied (turnColor $ turn pos) Rook)
+  $ board pos
+  where
+    r = if turn pos == White then R1 else R8
 
 applyPromotionMove :: Promotion -> Position -> Position
-applyPromotionMove (Promotion from to piece) pos = undefined
+applyPromotionMove (Promotion from to piece) pos = do
+  \b -> pos { board = b, turn = switchColor (turn pos) }
+  $ updateBoard from Empty
+  $ updateBoard to (Occupied (turnColor $ turn pos) piece)
+  $ board pos
 
 switchColor :: Color -> Color
 switchColor White = Black

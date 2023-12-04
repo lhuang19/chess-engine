@@ -27,6 +27,7 @@ module Syntax
     Dir (..),
     dirOpposite,
     rankOp,
+    fileOp,
     coordinateMove,
     coordinateMoveMultiDir,
     coordinateMoveValid,
@@ -81,8 +82,8 @@ updateRowAt 0 f (x:xs) = f x : xs
 updateRowAt index f (x:xs) =
   x : updateRowAt (index - 1) f xs
 
-updateBoard :: Board -> Coordinate -> Square -> Board
-updateBoard (Board rows) (Coordinate r f) sq =
+updateBoard :: Coordinate -> Square -> Board -> Board
+updateBoard (Coordinate r f) sq (Board rows) =
   let updatedRow =
         updateRowAt
         (fromEnum f)
@@ -91,9 +92,7 @@ updateBoard (Board rows) (Coordinate r f) sq =
   in Board updatedRow
 
 initializeBoard :: [(Coordinate, Square)] -> Board
-initializeBoard = foldl (\b (c, s) -> updateBoard b c s) emptyBoard
-  
-
+initializeBoard = foldl (\b (c, s) -> updateBoard c s b) emptyBoard
 
 data Castling = Castling
   { whiteKingSide :: Bool
@@ -147,6 +146,17 @@ rankOp r = case r of
   R6 -> R3
   R7 -> R2
   R8 -> R1
+
+fileOp :: File -> File
+fileOp f = case f of
+  A -> H
+  B -> G
+  C -> F
+  D -> E
+  E -> D
+  F -> C
+  G -> B
+  H -> A
 
 
 coordinateMove :: Dir -> Coordinate -> Maybe Coordinate

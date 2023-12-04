@@ -446,9 +446,6 @@ test_validKing =
     [ kingValidMoves test_position1 (Coordinate E R1) ~?= []
     , kingValidMoves test_position2 (Coordinate E R8) ~?= []
     ]
-    
-
-
 
 test_all :: IO Counts
 test_all = runTestTT $ TestList
