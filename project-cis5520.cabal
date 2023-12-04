@@ -41,15 +41,15 @@ library
       common-stanza
   exposed-modules:
       Lib
-      -- if you add modules to your project, list them here
-      -- so that they will be available to the executable and test suite
-      Syntax
-      FENParser
+
       CommonParser
+      FENParser
       MoveParser
-      Parser
       Moves
+      Parser
       Print
+      Syntax
+      Game
   hs-source-dirs:
       src
 
@@ -69,6 +69,16 @@ executable FENCliParser
     common-stanza
   main-is:
     FENCliParser.hs
+  hs-source-dirs:
+    app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends: project-cis5520
+
+executable Game
+  import:
+    common-stanza
+  main-is:
+    GameCli.hs
   hs-source-dirs:
     app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N

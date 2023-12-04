@@ -12,9 +12,7 @@ module Syntax
     Coordinate (..),
     Position (..),
     StandardMove (..),
-    Capture (..),
     Castle (..),
-    EnPassant (..),
     Promotion (..),
     Move (..),
     Game (..),
@@ -23,9 +21,30 @@ module Syntax
     succFile,
     predRank,
     succRank,
+    squareAt,
+    Dir' (..),
+    Bounds (..),
+    Dir (..),
+    dirOpposite,
+    rankOp,
+    coordinateMove,
+    coordinateMoveMultiDir,
+    coordinateMoveValid,
+    coordinateMoveMultiDirValid,
+    coordinateMoves,
+    coordinateMovesMultiDir,
+    coordinateValidMoves,
+    coordinateMovesMultiDirValid,
+    emptyBoard,
+    updateBoard,
+    initializeBoard,
+    startingPosition,
     )
 
 where
+
+import Data.Maybe (mapMaybe)
+import Control.Monad (foldM, (>=>))
 
 newtype Row = Row [Square] deriving (Show, Eq)
 newtype Board = Board [Row] deriving (Show, Eq)
@@ -47,6 +66,35 @@ annotatedBoard (Board rows) =
      squares) [R1 .. R8]
     rows
 
+emptyBoard :: Board
+emptyBoard = Board $ replicate 8 (Row $ replicate 8 Empty)
+
+updateAtIndex :: Int -> a -> [a] -> [a]
+updateAtIndex _ _ [] = []
+updateAtIndex 0 newVal (x:xs) = newVal : xs
+updateAtIndex index newVal (x:xs) =
+  x : updateAtIndex (index - 1) newVal xs
+
+updateRowAt :: Int -> (a -> a) -> [a] -> [a]
+updateRowAt _ _ [] = []
+updateRowAt 0 f (x:xs) = f x : xs
+updateRowAt index f (x:xs) =
+  x : updateRowAt (index - 1) f xs
+
+updateBoard :: Board -> Coordinate -> Square -> Board
+updateBoard (Board rows) (Coordinate r f) sq =
+  let updatedRow =
+        updateRowAt
+        (fromEnum f)
+        (\(Row squares) -> Row $ updateAtIndex (fromEnum r) sq squares)
+        rows
+  in Board updatedRow
+
+initializeBoard :: [(Coordinate, Square)] -> Board
+initializeBoard = foldl (\b (c, s) -> updateBoard b c s) emptyBoard
+  
+
+
 data Castling = Castling
   { whiteKingSide :: Bool
   , whiteQueenSide :: Bool
@@ -58,6 +106,91 @@ data Coordinate = Coordinate
   { file :: File
   , rank :: Rank
   } deriving (Show, Eq)
+
+-- TODO move this to separate file
+
+data Dir' =
+  SF -- succ file
+  | PF -- pred file
+  | SR -- succ rank
+  | PR -- pred rank
+  deriving (Show, Eq)
+
+data Bounds = CanCapture | MustCapture | CannotCapture deriving (Show, Eq)
+
+data Dir = Dir Bounds [Dir'] deriving (Show, Eq)
+
+dirOp :: Dir' -> Coordinate -> Maybe Coordinate
+dirOp d (Coordinate f r) = case d of
+  SF -> Coordinate <$> succFile f <*> pure r
+  PF -> Coordinate <$> predFile f <*> pure r
+  SR -> Coordinate f <$> succRank r
+  PR -> Coordinate f <$> predRank r
+
+dirOpposite' :: Dir' -> Dir'
+dirOpposite' d = case d of
+  SF -> PF
+  PF -> SF
+  SR -> PR
+  PR -> SR
+
+dirOpposite :: Dir -> Dir
+dirOpposite (Dir b ds) = Dir b $ map dirOpposite' ds
+
+rankOp :: Rank -> Rank
+rankOp r = case r of
+  R1 -> R8
+  R2 -> R7
+  R3 -> R6
+  R4 -> R5
+  R5 -> R4
+  R6 -> R3
+  R7 -> R2
+  R8 -> R1
+
+
+coordinateMove :: Dir -> Coordinate -> Maybe Coordinate
+coordinateMove (Dir _ ds) c = foldM (flip dirOp) c ds
+
+coordinateMoveValid :: Dir -> Position -> Coordinate -> Maybe Coordinate
+coordinateMoveValid d@(Dir bounds _) (Position b t _ _ _ _) c = do
+  c' <- coordinateMove d c
+  case (bounds, squareAt b c') of
+    (CanCapture, Occupied t' _) -> if t == t' then Nothing else Just c'
+    (MustCapture, Occupied t' _) -> if t == t' then Nothing else Just c'
+    (CannotCapture, Occupied t' _) -> Nothing
+    (CanCapture, Empty) -> Just c'
+    (MustCapture, Empty) -> Nothing
+    (CannotCapture, Empty) -> Just c'
+
+coordinateMoveMultiDir :: [Dir] -> Coordinate -> [Coordinate]
+coordinateMoveMultiDir ds c = mapMaybe (`coordinateMove` c) ds
+
+coordinateMoveMultiDirValid :: [Dir] -> Position -> Coordinate -> [Coordinate]
+coordinateMoveMultiDirValid ds p c = mapMaybe (\d -> coordinateMoveValid d p c) ds
+
+
+iterateM' :: (a -> Maybe a) -> a -> [a]
+iterateM' f x = x : maybe [] (iterateM' f) (f x)
+
+iterateM :: (a -> Maybe a) -> a -> [a]
+iterateM f x = tail $ iterateM' f x
+
+coordinateMoves :: Dir -> Coordinate -> [Coordinate]
+coordinateMoves d = iterateM (coordinateMove d)
+
+coordinateValidMoves :: Dir -> Position -> Coordinate -> [Coordinate]
+coordinateValidMoves d@(Dir bounds _) p = iterateM (coordinateMoveValid d p)
+
+coordinateMovesMultiDir ::  [Dir] -> Coordinate -> [Coordinate]
+coordinateMovesMultiDir ds c = concatMap (`coordinateMoves` c) ds
+
+coordinateMovesMultiDirValid :: [Dir] -> Position -> Coordinate -> [Coordinate]
+coordinateMovesMultiDirValid ds p c = concatMap (\d -> coordinateValidMoves d p c) ds
+
+
+
+
 
 data Position = Position
   { board :: Board
@@ -72,17 +205,12 @@ data Position = Position
 
 data StandardMove = StandardMove Piece Coordinate Coordinate deriving (Show, Eq)
 
-data Capture = Capture Piece Coordinate Coordinate deriving (Show, Eq)
+data Castle = Kingside | Queenside deriving (Show, Eq)
 
-data Castle = KingsideCastle | QueensideCastle deriving (Show, Eq)
-
-data EnPassant = EnPassant Coordinate deriving (Show, Eq)
-
-data Promotion = Promotion Coordinate Piece deriving (Show, Eq)
+data Promotion = Promotion Coordinate Coordinate Piece deriving (Show, Eq)
 
 data Move
   = StdMove StandardMove
-  | CapMove Capture
   | CastMove Castle
   | PromMove Promotion
   deriving (Show, Eq)
@@ -90,6 +218,7 @@ data Move
 data Game = Game
   { position :: Position
   , previousPosition :: Position
+  , lastMove :: Maybe Move
   } deriving (Show, Eq)
 
 -- functions on data types
@@ -135,6 +264,32 @@ succRank r = case r of
   R2 -> Just R3
   R1 -> Just R2
 
+fileIndex :: File -> Int
+fileIndex f = case f of
+  A -> 0
+  B -> 1
+  C -> 2
+  D -> 3
+  E -> 4
+  F -> 5
+  G -> 6
+  H -> 7
+
+rankIndex :: Rank -> Int
+rankIndex r = case r of
+  R1 -> 0
+  R2 -> 1
+  R3 -> 2
+  R4 -> 3
+  R5 -> 4
+  R6 -> 5
+  R7 -> 6
+  R8 -> 7
+
+squareAt :: Board -> Coordinate -> Square
+squareAt (Board rows) (Coordinate f r) = case rows !! rankIndex r of
+  Row squares -> squares !! fileIndex f
+
 -- test1
 wBoard1 :: Board
 wBoard1 =
@@ -160,3 +315,22 @@ wPosition1 =
     0
     1
 
+startingPosition :: Position
+startingPosition = Position
+  (Board
+    [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
+    , Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn]
+    , Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
+      ]
+  )
+  White
+  (Castling True True True True)
+  Nothing
+  0
+  1
+ 

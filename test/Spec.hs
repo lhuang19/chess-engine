@@ -5,6 +5,7 @@ import Lib
 
 import qualified FENParser
 import qualified Moves
+import qualified MoveParser
 
 
 main :: IO ()
@@ -16,6 +17,10 @@ main = do
 
     putStrLn "Testing Moves"
     _ <- Moves.test_all
+    putStrLn ""
+
+    putStrLn "Testing Move Parser"
+    _ <- MoveParser.test_all
     putStrLn ""
 
     return ()

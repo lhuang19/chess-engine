@@ -1,155 +1,173 @@
 module Moves (
-  candidateCoordinates,
   pawnMoves,
   knightMoves,
   bishopMoves,
   rookMoves,
   queenMoves,
   kingMoves,
+  validMoves,
   test_all
 ) where
 
-import Data.Maybe (maybeToList, isJust)
-import Control.Monad ((>=>))
+import Data.Maybe (maybeToList, catMaybes)
 import Data.List qualified as List
+import Control.Monad ((>=>))
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 
 import Syntax
 
-validFrom :: Position -> Piece -> Coordinate -> Bool
-validFrom (Position b t _ _ _ _) p from =
-  isJust $ List.find (==(from, Occupied t p)) (annotatedBoard b)
+validFrom :: Position -> Coordinate -> Piece -> Bool
+validFrom (Position b t _ _ _ _) c p = squareAt b c == Occupied t p
 
-candidateCoordinates :: Position -> Piece -> Coordinate -> [Coordinate]
-candidateCoordinates (Position _ t _ _ _ _) p from = do
-  let
-    c = case t of
-      White -> White
-      Black -> Black
-  case p of
-    Pawn -> pawnMoves c from
-    Knight -> knightMoves from
-    Bishop -> bishopMoves from
-    Rook -> rookMoves from
-    Queen -> queenMoves from
-    King -> kingMoves from
+-- | pawn
+pawnWhiteDir :: Coordinate -> [Dir]
+pawnWhiteDir (Coordinate _ r) = do
+  let moves = [Dir CannotCapture [SR], Dir MustCapture [PF, SR], Dir MustCapture [SF, SR]]
+  if r == R2 then --
+    moves ++ [Dir CannotCapture [SR, SR]]
+  else
+    moves
+
+pawnDirs :: Coordinate -> Color -> [Dir]
+pawnDirs (Coordinate _ r) c = case c of
+  White -> pawnWhiteDir (Coordinate A r)
+  Black -> map dirOpposite $ pawnWhiteDir (Coordinate A (rankOp r))
 
 pawnMoves :: Color -> Coordinate -> [Coordinate]
-pawnMoves c (Coordinate f r) = case c of
-  White -> case r of
-    R2 -> [Coordinate f R3, Coordinate f R4]
-    R8 -> error "pawnMoves: white pawn on rank 8"
-    _ -> maybeToList $ Coordinate f <$> succRank r
-  Black -> case r of
-    R7 -> [Coordinate f R6, Coordinate f R5]
-    R1 -> error "pawnMoves: black pawn on rank 1"
-    _ -> maybeToList $ Coordinate f <$> predRank r
+pawnMoves color c = coordinateMoveMultiDir (pawnDirs c color) c
+
+pawnValidMoves :: Position -> Coordinate -> [Coordinate]
+pawnValidMoves p c =
+  if validFrom p c Pawn
+    then coordinateMoveMultiDirValid (pawnDirs c (turn p)) p c
+    else []
+
+-- | knight
+knightDirs :: [Dir]
+knightDirs =
+  [ Dir CanCapture [PF, PF, PR]
+  , Dir CanCapture [PF, PF, SR]
+  , Dir CanCapture [PF, PR, PR]
+  , Dir CanCapture [PF, SR, SR]
+  , Dir CanCapture [SF, SF, PR]
+  , Dir CanCapture [SF, SF, SR]
+  , Dir CanCapture [SF, PR, PR]
+  , Dir CanCapture [SF, SR, SR]
+  ]
 
 knightMoves :: Coordinate -> [Coordinate]
-knightMoves (Coordinate f r) =
-  maybeToList (Coordinate <$> predFile2 f <*> predRank r) ++
-  maybeToList (Coordinate <$> predFile2 f <*> succRank r) ++
-  maybeToList (Coordinate <$> predFile f <*> predRank2 r) ++
-  maybeToList (Coordinate <$> predFile f <*> succRank2 r) ++
-  maybeToList (Coordinate <$> succFile f <*> predRank2 r) ++
-  maybeToList (Coordinate <$> succFile f <*> succRank2 r) ++
-  maybeToList (Coordinate <$> succFile2 f <*> predRank r) ++
-  maybeToList (Coordinate <$> succFile2 f <*> succRank r)
-  where
-    succFile2 = succFile >=> succFile
-    predFile2 = predFile >=> predFile
-    succRank2 = succRank >=> succRank
-    predRank2 = predRank >=> predRank
+knightMoves = coordinateMoveMultiDir knightDirs
 
-iterateM :: (a -> Maybe a) -> a -> [a]
-iterateM f x = x : maybe [] (iterateM f) (f x)
+knightValidMoves :: Position -> Coordinate -> [Coordinate]
+knightValidMoves p c =
+  if validFrom p c Knight
+    then coordinateMoveMultiDirValid knightDirs p c
+    else []
+
+-- | bishop
+bishopDirs :: [Dir]
+bishopDirs =
+  [ Dir CanCapture [SF, SR]
+  , Dir CanCapture [SF, PR]
+  , Dir CanCapture [PF, SR]
+  , Dir CanCapture [PF, PR]
+  ]
 
 bishopMoves :: Coordinate -> [Coordinate]
-bishopMoves (Coordinate f r) =
-  filter (\(Coordinate f' r') -> f' /= f || r' /= r) $
-  concat
-    [ movesInDirection succFile succRank
-    , movesInDirection succFile predRank
-    , movesInDirection predFile succRank
-    , movesInDirection predFile predRank
-    ]
-  where
-    movesInDirection :: (File -> Maybe File) -> (Rank -> Maybe Rank) -> [Coordinate]
-    movesInDirection nextFile nextRank =
-      map (\(f', r') -> Coordinate f' r') $ zip (iterateM nextFile f) (iterateM nextRank r)
+bishopMoves = coordinateMovesMultiDir bishopDirs
 
+bishopValidMoves :: Position -> Coordinate -> [Coordinate]
+bishopValidMoves p c =
+  if validFrom p c Bishop
+    then coordinateMovesMultiDirValid bishopDirs p c
+    else []
+
+-- | rook
+rookDirs :: [Dir]
+rookDirs =
+  [ Dir CanCapture [SF]
+  , Dir CanCapture [PF]
+  , Dir CanCapture [SR]
+  , Dir CanCapture [PR]
+  ]
 
 rookMoves :: Coordinate -> [Coordinate]
-rookMoves (Coordinate f r) =
-  filter (\(Coordinate f' r') -> f' /= f || r' /= r) $
-  concat
-    [ movesInFile succFile
-    , movesInFile predFile
-    , movesInRank succRank
-    , movesInRank predRank
-    ]
-  where
-    movesInFile:: (File -> Maybe File) -> [Coordinate]
-    movesInFile nextFile =
-      map (`Coordinate` r) $ iterateM nextFile f
+rookMoves = coordinateMovesMultiDir rookDirs
 
-    movesInRank :: (Rank -> Maybe Rank) -> [Coordinate]
-    movesInRank nextRank =
-      map (Coordinate f) $ iterateM nextRank r
+rookValidMoves :: Position -> Coordinate -> [Coordinate]
+rookValidMoves p c =
+  if validFrom p c Rook
+    then coordinateMovesMultiDirValid rookDirs p c
+  else []
+
+-- | queen
+queenDirs :: [Dir]
+queenDirs = bishopDirs ++ rookDirs
 
 queenMoves :: Coordinate -> [Coordinate]
-queenMoves c = bishopMoves c ++ rookMoves c
+queenMoves = coordinateMovesMultiDir queenDirs
+
+queenValidMoves :: Position -> Coordinate -> [Coordinate]
+queenValidMoves p c =
+  if validFrom p c Queen
+    then coordinateMovesMultiDirValid queenDirs p c
+    else []
+
+-- | king
+kingDirs :: [Dir]
+kingDirs =
+  [ Dir CanCapture [SF]
+  , Dir CanCapture [PF]
+  , Dir CanCapture [SR]
+  , Dir CanCapture [PR]
+  , Dir CanCapture [SF, SR]
+  , Dir CanCapture [SF, PR]
+  , Dir CanCapture [PF, SR]
+  , Dir CanCapture [PF, PR]
+  ]
 
 kingMoves :: Coordinate -> [Coordinate]
-kingMoves (Coordinate f r) =
-  concat
-    [ movesInFile succFile
-    , movesInFile predFile
-    , movesInRank succRank
-    , movesInRank predRank
-    , movesInDirection succFile succRank
-    , movesInDirection succFile predRank
-    , movesInDirection predFile succRank
-    , movesInDirection predFile predRank
-    ]
-  where
-    movesInFile:: (File -> Maybe File) -> [Coordinate]
-    movesInFile nextFile =
-      map (`Coordinate` r) $ maybeToList (nextFile f)
+kingMoves = coordinateMoveMultiDir kingDirs
 
-    movesInRank :: (Rank -> Maybe Rank) -> [Coordinate]
-    movesInRank nextRank =
-      map (Coordinate f) $ maybeToList (nextRank r)
+kingValidMoves :: Position -> Coordinate -> [Coordinate]
+kingValidMoves p c =
+  if validFrom p c King
+    then coordinateMoveMultiDirValid kingDirs p c
+    else []
 
-    movesInDirection :: (File -> Maybe File) -> (Rank -> Maybe Rank) -> [Coordinate]
-    movesInDirection nextFile nextRank =
-      map (uncurry Coordinate) $ maybeToList $ do
-        f' <- nextFile f
-        r' <- nextRank r
-        return (f', r')
+validMoves :: Position -> Piece -> Coordinate -> [Coordinate]
+validMoves pos p c = case p of
+  Pawn -> pawnValidMoves pos c
+  Knight -> knightValidMoves pos c
+  Bishop -> bishopValidMoves pos c
+  Rook -> rookValidMoves pos c
+  Queen -> queenValidMoves pos c
+  King -> kingValidMoves pos c
 
 test_pawn :: Test
 test_pawn =
   "pawn moves" ~:
   TestList
-    [ pawnMoves White (Coordinate A R2) ~?= [Coordinate A R3, Coordinate A R4]
-    , pawnMoves White (Coordinate A R3) ~?= [Coordinate A R4]
-    , pawnMoves Black (Coordinate A R7) ~?= [Coordinate A R6, Coordinate A R5]
-    , pawnMoves Black (Coordinate A R6) ~?= [Coordinate A R5]
+    [ pawnMoves White (Coordinate A R2) ~?= [Coordinate A R3, Coordinate B R3, Coordinate A R4]
+    , pawnMoves White (Coordinate A R3) ~?= [Coordinate A R4, Coordinate B R4]
+    , pawnMoves Black (Coordinate A R7) ~?= [Coordinate A R6, Coordinate B R6, Coordinate A R5]
+    , pawnMoves Black (Coordinate A R6) ~?= [Coordinate A R5, Coordinate B R5]
+    , pawnMoves White (Coordinate D R2) ~?= [Coordinate D R3, Coordinate C R3, Coordinate E R3, Coordinate D R4]
+    , pawnMoves Black (Coordinate D R7) ~?= [Coordinate D R6, Coordinate E R6, Coordinate C R6, Coordinate D R5]
     ]
 
 test_knight :: Test
 test_knight =
   "knight moves" ~:
   TestList
-    [ knightMoves (Coordinate A R1) ~?= [Coordinate B R3, Coordinate C R2]
-    , knightMoves (Coordinate B R1) ~?= [Coordinate A R3, Coordinate C R3, Coordinate D R2]
+    [ knightMoves (Coordinate A R1) ~?= [Coordinate C R2, Coordinate B R3]
+    , knightMoves (Coordinate B R1) ~?= [Coordinate A R3, Coordinate D R2, Coordinate C R3]
     , knightMoves (Coordinate C R1) ~?=
       [
         Coordinate A R2,
         Coordinate B R3,
-        Coordinate D R3,
-        Coordinate E R2
+        Coordinate E R2,
+        Coordinate D R3
        ]
     , knightMoves (Coordinate D R3) ~?=
       [
@@ -157,10 +175,10 @@ test_knight =
         Coordinate B R4,
         Coordinate C R1,
         Coordinate C R5,
-        Coordinate E R1,
-        Coordinate E R5,
         Coordinate F R2,
-        Coordinate F R4
+        Coordinate F R4,
+        Coordinate E R1,
+        Coordinate E R5
       ]
     ]
 
@@ -314,15 +332,138 @@ test_king =
       ]
     ]
 
+test_position1 :: Position
+test_position1 = Position
+  (Board
+    [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
+    , Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn]
+    , Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
+      ]
+  )
+  White
+  (Castling True True True True)
+  Nothing
+  0
+  1
+
+test_position2 :: Position
+test_position2 = Position
+  (Board
+    [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
+    , Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
+    , Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn]
+    , Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
+      ]
+  )
+  Black
+  (Castling True True True True)
+  Nothing
+  0
+  1
+
+-- test_position3 :: Position
+-- test_position3 = Position
+--   (Board
+--     [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
+
+test_validPawn :: Test
+test_validPawn =
+  "valid pawn moves" ~:
+  TestList
+    [ pawnValidMoves test_position1 (Coordinate A R2) ~?= [Coordinate A R3, Coordinate A R4]
+    , pawnValidMoves test_position1 (Coordinate D R2) ~?= [Coordinate D R3, Coordinate D R4]
+    , pawnValidMoves test_position2 (Coordinate A R7) ~?= [Coordinate A R6, Coordinate A R5]
+    , pawnValidMoves test_position2 (Coordinate D R7) ~?= [Coordinate D R6, Coordinate D R5]
+    , pawnValidMoves test_position1 (Coordinate D R3) ~?= []
+    ]
+
+test_validKnight :: Test
+test_validKnight =
+  "valid knight moves" ~:
+  TestList
+    [ knightValidMoves test_position1 (Coordinate B R1) ~?=
+      [ Coordinate A R3
+      , Coordinate C R3
+      ]
+    , knightValidMoves test_position1 (Coordinate C R1) ~?= []
+    , knightValidMoves test_position1 (Coordinate G R1) ~?=
+      [ Coordinate F R3
+      , Coordinate H R3
+      ]
+    , knightValidMoves test_position2 (Coordinate B R8) ~?=
+      [ Coordinate A R6
+      , Coordinate C R6
+      ]
+    , knightValidMoves test_position2 (Coordinate C R8) ~?= []
+    , knightValidMoves test_position2 (Coordinate G R8) ~?=
+      [ Coordinate F R6
+      , Coordinate H R6
+      ]
+    , knightValidMoves test_position1 (Coordinate G R8) ~?= []
+    ]
+
+test_validBishop :: Test
+test_validBishop =
+  "valid bishop moves" ~:
+  TestList
+    [ bishopValidMoves test_position1 (Coordinate C R1) ~?= []
+    , bishopValidMoves test_position1 (Coordinate F R1) ~?= []
+    , bishopValidMoves test_position2 (Coordinate C R8) ~?= []
+    , bishopValidMoves test_position2 (Coordinate F R8) ~?= []
+    ]
+
+test_validRook :: Test
+test_validRook =
+  "valid rook moves" ~:
+  TestList
+    [ rookValidMoves test_position1 (Coordinate A R1) ~?= []
+    , rookValidMoves test_position1 (Coordinate H R1) ~?= []
+    , rookValidMoves test_position2 (Coordinate A R8) ~?= []
+    , rookValidMoves test_position2 (Coordinate H R8) ~?= []
+    ]
+
+test_validQueen :: Test
+test_validQueen =
+  "valid queen moves" ~:
+  TestList
+    [ queenValidMoves test_position1 (Coordinate D R1) ~?= []
+    , queenValidMoves test_position2 (Coordinate D R8) ~?= []
+    ]
+
+test_validKing :: Test
+test_validKing =
+  "valid king moves" ~:
+  TestList
+    [ kingValidMoves test_position1 (Coordinate E R1) ~?= []
+    , kingValidMoves test_position2 (Coordinate E R8) ~?= []
+    ]
+    
+
+
+
 test_all :: IO Counts
 test_all = runTestTT $ TestList
-  [
-    test_pawn,
-    test_knight,
-    test_bishop,
-    test_rook,
-    test_queen,
-    test_king
+  [ test_pawn
+  , test_knight
+  , test_bishop
+  , test_rook
+  , test_queen
+  , test_king
+  , test_validPawn
+  , test_validKnight
+  , test_validBishop
+  , test_validRook
+  , test_validQueen
+  , test_validKing
   ]
 
 

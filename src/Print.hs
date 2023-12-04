@@ -30,7 +30,7 @@ instance PP Color where
   pp Black = PP.char 'B'
 
 instance PP Square where
-  pp Empty = PP.text "_"
+  pp Empty = PP.text "__"
   pp (Occupied c p) = pp c PP.<> pp p
 
 instance PP Row where
@@ -54,7 +54,7 @@ instance PP Board where
     $ concat
     [
       [filePrint, horizontalLine '_'],
-      zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0..] xs,
+      zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0..] (reverse xs),
       [horizontalLine '‾', filePrint, PP.char '\n']
     ]
 

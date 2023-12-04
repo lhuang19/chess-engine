@@ -9,20 +9,41 @@ import Parser (Parser)
 import Parser qualified as P
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 
-constP :: Char -> a -> Parser a
-constP s x = P.char s $> x
+constP :: String -> a -> Parser a
+constP s x = P.string s $> x
 
-constP' :: Char -> a -> Parser a
-constP' s x = P.char' s $> x
+constCharP :: Char -> a -> Parser a
+constCharP s x = P.char s $> x
+
+constCharP' :: Char -> a -> Parser a
+constCharP' s x = P.char' s $> x
+
+pawnP :: Parser Piece
+pawnP = constCharP' 'p' Pawn
+
+knightP :: Parser Piece
+knightP = constCharP' 'n' Knight
+
+bishopP :: Parser Piece
+bishopP = constCharP' 'b' Bishop
+
+rookP :: Parser Piece
+rookP = constCharP' 'r' Rook
+
+queenP :: Parser Piece
+queenP = constCharP' 'q' Queen
+
+kingP :: Parser Piece
+kingP = constCharP' 'k' King
+
+unpromotableP :: Parser Piece
+unpromotableP = pawnP <|> kingP
+
+promotableP :: Parser Piece
+promotableP = knightP <|> bishopP <|> rookP <|> queenP
 
 pieceP :: Parser Piece
-pieceP =
-  constP' 'p' Pawn
-  <|> constP' 'n' Knight
-  <|> constP' 'b' Bishop
-  <|> constP' 'r' Rook
-  <|> constP' 'q' Queen
-  <|> constP' 'k' King
+pieceP = unpromotableP <|> promotableP
 
 colorPeekP :: Parser Color
 colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha'
@@ -37,25 +58,25 @@ occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
 
 fileP :: Parser File
 fileP =
-  constP 'a' A
-  <|> constP 'b' B
-  <|> constP 'c' C
-  <|> constP 'd' D
-  <|> constP 'e' E
-  <|> constP 'f' F
-  <|> constP 'g' G
-  <|> constP 'h' H
+  constCharP 'a' A
+  <|> constCharP 'b' B
+  <|> constCharP 'c' C
+  <|> constCharP 'd' D
+  <|> constCharP 'e' E
+  <|> constCharP 'f' F
+  <|> constCharP 'g' G
+  <|> constCharP 'h' H
 
 rankP :: Parser Rank
 rankP =
-  constP '1' R1
-  <|> constP '2' R2
-  <|> constP '3' R3
-  <|> constP '4' R4
-  <|> constP '5' R5
-  <|> constP '6' R6
-  <|> constP '7' R7
-  <|> constP '8' R8
+  constCharP '1' R1
+  <|> constCharP '2' R2
+  <|> constCharP '3' R3
+  <|> constCharP '4' R4
+  <|> constCharP '5' R5
+  <|> constCharP '6' R6
+  <|> constCharP '7' R7
+  <|> constCharP '8' R8
 
 coordinateP :: Parser Coordinate
 coordinateP = Coordinate <$> fileP <*> rankP

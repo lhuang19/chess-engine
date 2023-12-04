@@ -1,96 +1,80 @@
 module MoveParser where
 
+import CommonParser
 import Control.Applicative
 import Data.Char qualified as Char
 import Data.Functor (($>))
 import Data.List qualified as List
-import Syntax
 import Parser (Parser)
 import Parser qualified as P
+import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
-import CommonParser
 
--- moveInputP:: Parser MoveInput
--- moveInputP =
---   MoveInput
---   <$> P.optional (pieceP)
---   <*> P.optional (fileP)
---   <*> P.optional (rankP)
---   <*> coordinateP
---   <*> P.optional (constP "x" ())
---   <*> squareP
---   <*> P.optional (constP "=" ())
---   <*> P.optional pieceP
---   <*> P.optional (constP "e.p." ())
+standardMoveP :: Parser StandardMove
+standardMoveP = StandardMove <$> pieceP <*> coordinateP <*> coordinateP <* P.eof
 
+castleP :: Parser Castle
+castleP =
+  constP "O-O" Kingside <* P.eof
+  <|> constP "O-O-O" Queenside <* P.eof
 
--- candidateCoordinates :: Position -> Piece -> Maybe File -> Maybe Rank -> [Coordinate]
--- candidateCoordinates pos p f r = case
---   Pawn -> 
---   Knight -> knightCandidateCoordinates
---   Bishop -> bishopCandidateCoordinates
---   Rook -> rookCandidateCoordinates
---   Queen -> queenCandidateCoordinates
---   King -> kingCandidateCoordinates
+promotionP :: Parser Promotion
+promotionP =
+  Promotion
+  <$ pawnP
+  <*> coordinateP
+  <*> coordinateP
+  <*> promotableP
+  <* P.eof
 
+moveP :: Parser Move
+moveP =
+  PromMove <$> promotionP
+  <|> CastMove <$> castleP
+  <|> StdMove <$> standardMoveP
 
+parseMove :: String -> Either P.ParseError Move
+parseMove = P.parse moveP
 
--- moveToStandardMove :: MoveInput -> Position -> Maybe StandardMove
--- moveToStandardMove (MoveInput p f r c x s e p' e') = do
---   let piece = case p of
---         Nothing -> Pawn
---         Just p -> p
---   if x == Nothing && e == Nothing && p' == Nothing && e' == Nothing
---     then
---     case (f, r) of
---       (Just f, Just r) -> Just (StandardMove piece f r c)
-      
+test_standardMove :: Test
+test_standardMove =
+  "parsing standard move"
+  ~: TestList
+  [ P.parse standardMoveP "pe2e4" ~?= Right (StandardMove Pawn (Coordinate E R2) (Coordinate E R4)),
+    P.parse standardMoveP "Nc3d5" ~?= Right (StandardMove Knight (Coordinate C R3) (Coordinate D R5)),
+    P.parse standardMoveP "Bf1c4" ~?= Right (StandardMove Bishop (Coordinate F R1) (Coordinate C R4)),
+    P.parse standardMoveP "Rg1g8" ~?= Right (StandardMove Rook (Coordinate G R1) (Coordinate G R8)),
+    P.parse standardMoveP "Qd1h5" ~?= Right (StandardMove Queen (Coordinate D R1) (Coordinate H R5)),
+    P.parse standardMoveP "Ke1e2" ~?= Right (StandardMove King (Coordinate E R1) (Coordinate E R2)),
+    P.parse standardMoveP "pe2e4a" ~?= Left "No parses"
+  ]
 
+test_castle :: Test
+test_castle =
+  "parsing castle"
+  ~: TestList
+  [ P.parse castleP "O-O" ~?= Right Kingside,
+    P.parse castleP "O-O-O" ~?= Right Queenside,
+    P.parse castleP "O-O-Oa" ~?= Left "No parses"
+  ]
 
---     Just (StandardMove (fromJust p) (fromJust f) (fromJust r) c)
---     else Nothing
-
-
--- standardMoveP :: Position -> Parser StandardMove
--- standardMoveP = do
---   pos <- P.get
---   move <- moveInputP
---   let piece = case move of
---         MoveInput Nothing _ _ _ _ _ _ _ _ _ -> Pawn
---         MoveInput (Just p) _ _ _ _ _ _ _ _ _ -> p
---   let file = case move of
---         MoveInput _ Nothing _ _ _ _ _ _ _ _ -> Nothing
---         MoveInput _ (Just f) _ _ _ _ _ _ _ _ -> Just f
---   let rank = case move of
---         MoveInput _ _ Nothing _ _ _ _ _ _ _ -> Nothing
---         MoveInput _ _ (Just r) _ _ _ _ _ _ _ -> Just r
---   let to = case move of
---         MoveInput _ _ _ c _ _ _ _ _ _ -> c
---   let capture = case move of
---         MoveInput _ _ _ _ (Just _) _ _ _ _ _ -> True
---         MoveInput _ _ _ _ Nothing _ _ _ _ _ -> False
---   let captured = case move of
---         MoveInput _ _ _ _ _ s _ _ _ _ -> s
---   let promotion = case move of
---         MoveInput _ _ _ _ _ _ _ (Just _) _ _ -> True
---         MoveInput _ _ _ _ _ _ _ Nothing _ _ -> False
---   let promoted = case move of
---         MoveInput _ _ _ _ _ _ _ _ (Just p) _ -> p
---   let enPassant = case move of
---         MoveInput _ _ _ _ _ _ _ _ _ (Just _) -> True
---         MoveInput _ _ _ _ _ _ _ _ _ Nothing -> False
---   let from = case move of
---         MoveInput _ _ _ c _ _ _ _ _ _ -> case c of
---           Coordinate f r -> Coordinate (maybe (fileOf pos piece rank to) id file) (maybe (rankOf pos piece file to) id rank)
+test_promotion :: Test
+test_promotion =
+  "parsing promotion"
+  ~: TestList
+  [ P.parse promotionP "pe7e8q" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Queen),
+    P.parse promotionP "pe7e8n" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Knight),
+    P.parse promotionP "pe7e8b" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Bishop),
+    P.parse promotionP "pe7e8r" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Rook),
+    P.parse promotionP "pe7e8k" ~?= Left "No parses"
+  ]
 
 
-  
+test_all :: IO Counts
+test_all = runTestTT $ TestList
+  [ test_standardMove,
+    test_castle,
+    test_promotion
+  ]
 
--- castleP :: Parser Castle
--- castleP =
---   constP "O-O-O" QueenSide
---   <|> constP "O-O" KingSide
 
-
-
-  
