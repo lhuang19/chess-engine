@@ -76,6 +76,77 @@ parseBoard = P.parse boardP
 parseFEN :: String -> Either P.ParseError Position
 parseFEN = P.parse fenP
 
+squareToFEN :: Square -> String
+squareToFEN Empty = "1"
+squareToFEN (Occupied Black Pawn) = "p"
+squareToFEN (Occupied Black Knight) = "n"
+squareToFEN (Occupied Black Bishop) = "b"
+squareToFEN (Occupied Black Rook) = "r"
+squareToFEN (Occupied Black Queen) = "q"
+squareToFEN (Occupied Black King) = "k"
+squareToFEN (Occupied White Pawn) = "P"
+squareToFEN (Occupied White Knight) = "N"
+squareToFEN (Occupied White Bishop) = "B"
+squareToFEN (Occupied White Rook) = "R"
+squareToFEN (Occupied White Queen) = "Q"
+squareToFEN (Occupied White King) = "K"
+
+rowToFEN :: Row -> String
+rowToFEN (Row xs) =
+  -- convert squares to FEN
+  -- combine empty squares together
+  foldr (\x acc ->
+           case (x, acc) of
+              (Empty, '1' : xs) -> '2' : xs
+              (Empty, '2' : xs) -> '3' : xs
+              (Empty, '3' : xs) -> '4' : xs
+              (Empty, '4' : xs) -> '5' : xs
+              (Empty, '5' : xs) -> '6' : xs
+              (Empty, '6' : xs) -> '7' : xs
+              (Empty, '7' : xs) -> '8' : xs
+              (Empty, '8' : xs) -> '9' : xs
+              (_, xs) -> squareToFEN x ++ ' ' : xs
+           ) "" xs
+
+boardToFEN :: Board -> String
+boardToFEN (Board rs) = List.intercalate "/" $ map rowToFEN rs
+
+turnToFEN :: Color -> String
+turnToFEN White = "w"
+turnToFEN Black = "b"
+
+castlingToFEN :: Castling -> String
+castlingToFEN (Castling wk wq bk bq) =
+  (if wk then "K" else "")
+  ++ (if wq then "Q" else "")
+  ++ (if bk then "k" else "")
+  ++ (if bq then "q" else "")
+  ++ (if not (wk || wq || bk || bq) then "-" else "")
+
+enPassantToFEN :: Maybe Coordinate -> String
+enPassantToFEN Nothing = "-"
+enPassantToFEN (Just (Coordinate f r)) = show f ++ show r
+
+halfMoveClockToFEN :: Int -> String
+halfMoveClockToFEN = show
+
+fullMoveClockToFEN :: Int -> String
+fullMoveClockToFEN = show
+
+posToFEN :: Position -> String
+posToFEN (Position b t c e h f) =
+  boardToFEN b
+  ++ " "
+  ++ turnToFEN t
+  ++ " "
+  ++ castlingToFEN c
+  ++ " "
+  ++ enPassantToFEN e
+  ++ " "
+  ++ halfMoveClockToFEN h
+  ++ " "
+  ++ fullMoveClockToFEN f
+
 test_piece :: Test
 test_piece =
   "parsing piece"

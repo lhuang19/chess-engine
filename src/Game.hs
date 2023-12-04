@@ -9,6 +9,7 @@ import MoveParser
 import Moves
 import Print
 import Syntax
+import FENParser
 
 type GameMonad a = State Game a
 
@@ -28,7 +29,10 @@ getCurrentPosition = gets position
 moveValid :: Move -> Position -> Either String ()
 moveValid m pos = 
   case m of
-    CastMove castle -> return () -- todo
+    CastMove castle ->
+      if validCastle pos castle
+      then return ()
+      else Left "Invalid castle"
     PromMove prom -> return () -- todo
     StdMove (StandardMove p from to) ->
       if to `elem` validMoves pos p from
@@ -43,14 +47,14 @@ applyMove move pos = case move of
 
 applyStandardMove :: StandardMove -> Position -> Position
 applyStandardMove (StandardMove piece from to) pos = do
-  \b -> pos { board = b, turn = switchColor (turn pos) }
+  \b -> pos { board = b, turn = colorOp (turn pos) }
   $ updateBoard from Empty
   $ updateBoard to (Occupied (turnColor $ turn pos) piece)
   $ board pos
 
 applyCastleMove :: Castle -> Position -> Position
 applyCastleMove Kingside pos = do
-  \b -> pos { board = b, turn = switchColor (turn pos) }
+  \b -> pos { board = b, turn = colorOp (turn pos) }
   $ updateBoard (Coordinate E r) Empty
   $ updateBoard (Coordinate H r) Empty
   $ updateBoard (Coordinate F r) (Occupied (turnColor $ turn pos) King)
@@ -60,7 +64,7 @@ applyCastleMove Kingside pos = do
     r = if turn pos == White then R1 else R8
 
 applyCastleMove Queenside pos = do
-  \b -> pos { board = b, turn = switchColor (turn pos) }
+  \b -> pos { board = b, turn = colorOp (turn pos) }
   $ updateBoard (Coordinate E r) Empty
   $ updateBoard (Coordinate A r) Empty
   $ updateBoard (Coordinate C r) (Occupied (turnColor $ turn pos) King)
@@ -71,14 +75,11 @@ applyCastleMove Queenside pos = do
 
 applyPromotionMove :: Promotion -> Position -> Position
 applyPromotionMove (Promotion from to piece) pos = do
-  \b -> pos { board = b, turn = switchColor (turn pos) }
+  \b -> pos { board = b, turn = colorOp (turn pos) }
   $ updateBoard from Empty
   $ updateBoard to (Occupied (turnColor $ turn pos) piece)
   $ board pos
 
-switchColor :: Color -> Color
-switchColor White = Black
-switchColor Black = White
 
 turnColor :: Color -> Color
 turnColor White = White
@@ -89,6 +90,7 @@ gameLoop = go' startingPosition
   where
     go' :: Position -> IO ()
     go' pos = do
+      putStrLn $ "Type FEN at any time to get current FEN"
       putStrLn $ pretty pos
       go pos
 
@@ -96,17 +98,22 @@ gameLoop = go' startingPosition
     go pos = do
       putStrLn $ "Enter your move (e.g., 'pe2e4'):"
       input <- getLine
-      case parseMove input of
-        Right move -> do
-          case moveValid move pos of
-            Left errMsg -> do
-              putStrLn $ "Invalid move: " ++ errMsg
-              go pos
-            Right () -> do
-              let newPos = applyMove move pos
-              putStrLn $ "New Position: " ++ pretty newPos
-              putStrLn $ pretty newPos
-              go newPos
-        Left error -> do
-          putStrLn $ "Invalid input. Please enter a valid move." ++ error
-          go pos
+      if input == "FEN"
+      then do
+        putStrLn $ "Current FEN: " ++ FENParser.posToFEN pos
+        go pos
+      else
+        case parseMove input of
+          Right move -> do
+            case moveValid move pos of
+              Left errMsg -> do
+                putStrLn $ "Invalid move: " ++ errMsg
+                go pos
+              Right () -> do
+                let newPos = applyMove move pos
+                putStrLn $ "New Position: " ++ pretty newPos
+                putStrLn $ pretty newPos
+                go newPos
+          Left error -> do
+            putStrLn $ "Invalid input. Please enter a valid move." ++ error
+            go pos

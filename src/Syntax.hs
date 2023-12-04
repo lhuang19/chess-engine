@@ -17,6 +17,7 @@ module Syntax
     Move (..),
     Game (..),
     annotatedBoard,
+    piecesByColor,
     predFile,
     succFile,
     predRank,
@@ -28,6 +29,7 @@ module Syntax
     dirOpposite,
     rankOp,
     fileOp,
+    colorOp,
     coordinateMove,
     coordinateMoveMultiDir,
     coordinateMoveValid,
@@ -66,6 +68,12 @@ annotatedBoard (Board rows) =
              ) [A ..  H]
      squares) [R1 .. R8]
     rows
+
+piecesByColor :: Color -> Board -> [(Coordinate, Piece)]
+piecesByColor c =
+  map (\(c', s) -> case s of Occupied _ p -> (c', p); _ -> error "Empty square")
+  . filter (\(_, s) -> case s of Occupied c' _ -> c == c'; _ -> False)
+  . annotatedBoard
 
 emptyBoard :: Board
 emptyBoard = Board $ replicate 8 (Row $ replicate 8 Empty)
@@ -157,6 +165,10 @@ fileOp f = case f of
   F -> C
   G -> B
   H -> A
+
+colorOp :: Color -> Color
+colorOp White = Black
+colorOp Black = White
 
 
 coordinateMove :: Dir -> Coordinate -> Maybe Coordinate

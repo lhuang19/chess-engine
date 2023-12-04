@@ -6,6 +6,7 @@ module Moves (
   queenMoves,
   kingMoves,
   validMoves,
+  validCastle,
   test_all
 ) where
 
@@ -143,6 +144,57 @@ validMoves pos p c = case p of
   Rook -> rookValidMoves pos c
   Queen -> queenValidMoves pos c
   King -> kingValidMoves pos c
+
+coordinateInCheck :: Position -> Coordinate -> Bool
+coordinateInCheck pos@(Position b t _ _ _ _) c =
+  -- generate all possible capturing moves for the opposite color
+  -- check if any of those moves are the coordinate
+  -- if so, then the coordinate is in check
+  elem c
+  $ concatMap (\(c', p) -> validMoves pos p c') (piecesByColor (colorOp t) b)
+
+validCastle :: Position -> Castle -> Bool
+validCastle pos@(Position b t c _ _ _) castle =
+  eligible
+  && startingPositionsValid
+  && noChecks
+  && squaresInBetweenEmpty
+  where
+    eligible = case (t, castle) of
+      (White, Kingside) -> whiteKingSide c
+      (White, Queenside) -> whiteQueenSide c
+      (Black, Kingside) -> blackKingSide c
+      (Black, Queenside) -> blackQueenSide c
+
+    r = if turn pos == White then R1 else R8
+
+    castleSquares = case castle of
+      Kingside ->
+        [ Coordinate E r
+        , Coordinate F r
+        , Coordinate G r
+        , Coordinate H r
+        ]
+      Queenside ->
+        [ Coordinate E r
+        , Coordinate D r
+        , Coordinate C r
+        , Coordinate B r
+        , Coordinate A r
+        ]
+  
+    startingPositionsValid = case castle of
+      Kingside ->
+        validFrom pos (Coordinate E r) King
+        && validFrom pos (Coordinate H r) Rook
+      Queenside -> 
+        validFrom pos (Coordinate E r) King
+        && validFrom pos (Coordinate A r) Rook
+
+    noChecks = not $ any (coordinateInCheck pos) castleSquares
+
+    squaresInBetweenEmpty = all (\c -> squareAt b c == Empty) castleSquares
+
 
 test_pawn :: Test
 test_pawn =
