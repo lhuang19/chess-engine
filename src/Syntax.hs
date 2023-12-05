@@ -42,82 +42,92 @@ module Syntax
     updateBoard,
     initializeBoard,
     startingPosition,
-    )
-
+  )
 where
 
-import Data.Maybe (mapMaybe)
 import Control.Monad (foldM, (>=>))
+import Data.Maybe (mapMaybe)
 
 newtype Row = Row [Square] deriving (Show, Eq)
+
 newtype Board = Board [Row] deriving (Show, Eq)
 
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King deriving (Show, Eq)
+
 data Color = White | Black deriving (Show, Eq)
+
 data Square = Empty | Occupied Color Piece deriving (Show, Eq)
 
 data File = A | B | C | D | E | F | G | H deriving (Show, Eq, Enum, Bounded)
+
 data Rank = R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 deriving (Show, Eq, Enum, Bounded)
 
 annotatedBoard :: Board -> [(Coordinate, Square)]
 annotatedBoard (Board rows) =
-  concat
-  $ zipWith (\i (Row squares)->
-     zipWith (\j square ->
+  concat $
+    zipWith
+      ( \i (Row squares) ->
+          zipWith
+            ( \j square ->
                 (Coordinate j i, square)
-             ) [A ..  H]
-     squares) [R1 .. R8]
-    rows
+            )
+            [A .. H]
+            squares
+      )
+      [R1 .. R8]
+      rows
 
 piecesByColor :: Color -> Board -> [(Coordinate, Piece)]
 piecesByColor c =
   map (\(c', s) -> case s of Occupied _ p -> (c', p); _ -> error "Empty square")
-  . filter (\(_, s) -> case s of Occupied c' _ -> c == c'; _ -> False)
-  . annotatedBoard
+    . filter (\(_, s) -> case s of Occupied c' _ -> c == c'; _ -> False)
+    . annotatedBoard
 
 emptyBoard :: Board
 emptyBoard = Board $ replicate 8 (Row $ replicate 8 Empty)
 
 updateAtIndex :: Int -> a -> [a] -> [a]
 updateAtIndex _ _ [] = []
-updateAtIndex 0 newVal (x:xs) = newVal : xs
-updateAtIndex index newVal (x:xs) =
+updateAtIndex 0 newVal (x : xs) = newVal : xs
+updateAtIndex index newVal (x : xs) =
   x : updateAtIndex (index - 1) newVal xs
 
 updateRowAt :: Int -> (a -> a) -> [a] -> [a]
 updateRowAt _ _ [] = []
-updateRowAt 0 f (x:xs) = f x : xs
-updateRowAt index f (x:xs) =
+updateRowAt 0 f (x : xs) = f x : xs
+updateRowAt index f (x : xs) =
   x : updateRowAt (index - 1) f xs
 
 updateBoard :: Coordinate -> Square -> Board -> Board
 updateBoard (Coordinate r f) sq (Board rows) =
   let updatedRow =
         updateRowAt
-        (fromEnum f)
-        (\(Row squares) -> Row $ updateAtIndex (fromEnum r) sq squares)
-        rows
-  in Board updatedRow
+          (fromEnum f)
+          (\(Row squares) -> Row $ updateAtIndex (fromEnum r) sq squares)
+          rows
+   in Board updatedRow
 
 initializeBoard :: [(Coordinate, Square)] -> Board
 initializeBoard = foldl (\b (c, s) -> updateBoard c s b) emptyBoard
 
 data Castling = Castling
-  { whiteKingSide :: Bool
-  , whiteQueenSide :: Bool
-  , blackKingSide :: Bool
-  , blackQueenSide :: Bool
-  } deriving (Show, Eq)
+  { whiteKingSide :: Bool,
+    whiteQueenSide :: Bool,
+    blackKingSide :: Bool,
+    blackQueenSide :: Bool
+  }
+  deriving (Show, Eq)
 
 data Coordinate = Coordinate
-  { file :: File
-  , rank :: Rank
-  } deriving (Show, Eq)
+  { file :: File,
+    rank :: Rank
+  }
+  deriving (Show, Eq)
 
 -- TODO move this to separate file
 
-data Dir' =
-  SF -- succ file
+data Dir'
+  = SF -- succ file
   | PF -- pred file
   | SR -- succ rank
   | PR -- pred rank
@@ -170,7 +180,6 @@ colorOp :: Color -> Color
 colorOp White = Black
 colorOp Black = White
 
-
 coordinateMove :: Dir -> Coordinate -> Maybe Coordinate
 coordinateMove (Dir _ ds) c = foldM (flip dirOp) c ds
 
@@ -191,7 +200,6 @@ coordinateMoveMultiDir ds c = mapMaybe (`coordinateMove` c) ds
 coordinateMoveMultiDirValid :: [Dir] -> Position -> Coordinate -> [Coordinate]
 coordinateMoveMultiDirValid ds p c = mapMaybe (\d -> coordinateMoveValid d p c) ds
 
-
 iterateM' :: (a -> Maybe a) -> a -> [a]
 iterateM' f x = x : maybe [] (iterateM' f) (f x)
 
@@ -204,24 +212,21 @@ coordinateMoves d = iterateM (coordinateMove d)
 coordinateValidMoves :: Dir -> Position -> Coordinate -> [Coordinate]
 coordinateValidMoves d@(Dir bounds _) p = iterateM (coordinateMoveValid d p)
 
-coordinateMovesMultiDir ::  [Dir] -> Coordinate -> [Coordinate]
+coordinateMovesMultiDir :: [Dir] -> Coordinate -> [Coordinate]
 coordinateMovesMultiDir ds c = concatMap (`coordinateMoves` c) ds
 
 coordinateMovesMultiDirValid :: [Dir] -> Position -> Coordinate -> [Coordinate]
 coordinateMovesMultiDirValid ds p c = concatMap (\d -> coordinateValidMoves d p c) ds
 
-
-
-
-
 data Position = Position
-  { board :: Board
-  , turn :: Color
-  , castling ::  Castling
-  , enPassant :: Maybe Coordinate
-  , halfMoveClock :: Int
-  , fullMoveNumber :: Int
-  } deriving (Show, Eq)
+  { board :: Board,
+    turn :: Color,
+    castling :: Castling,
+    enPassant :: Maybe Coordinate,
+    halfMoveClock :: Int,
+    fullMoveNumber :: Int
+  }
+  deriving (Show, Eq)
 
 -- Assume user puts in relatively well formed data
 
@@ -238,10 +243,11 @@ data Move
   deriving (Show, Eq)
 
 data Game = Game
-  { position :: Position
-  , previousPosition :: Position
-  , lastMove :: Maybe Move
-  } deriving (Show, Eq)
+  { position :: Position,
+    previousPosition :: Position,
+    lastMove :: Maybe Move
+  }
+  deriving (Show, Eq)
 
 -- functions on data types
 predFile, succFile :: File -> Maybe File
@@ -254,7 +260,6 @@ predFile f = case f of
   F -> Just E
   G -> Just F
   H -> Just G
-
 succFile f = case f of
   H -> Nothing
   G -> Just H
@@ -275,7 +280,6 @@ predRank r = case r of
   R6 -> Just R5
   R7 -> Just R6
   R8 -> Just R7
-
 succRank r = case r of
   R8 -> Nothing
   R7 -> Just R8
@@ -316,10 +320,9 @@ squareAt (Board rows) (Coordinate f r) = case rows !! rankIndex r of
 wBoard1 :: Board
 wBoard1 =
   Board
-    [
-      Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Occupied White King],
+    [ Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Occupied White King],
       Row [Occupied White Pawn, Empty, Occupied Black Pawn, Empty, Occupied Black Pawn, Empty, Occupied Black Pawn, Empty],
-      Row [Empty, Empty,  Occupied White Pawn, Empty, Occupied White Pawn, Empty, Occupied White Pawn, Occupied Black King],
+      Row [Empty, Empty, Occupied White Pawn, Empty, Occupied White Pawn, Empty, Occupied White Pawn, Occupied Black King],
       Row [Empty, Empty, Empty, Empty, Empty, Empty, Occupied Black Pawn, Occupied White Pawn],
       Row [Empty, Empty, Empty, Occupied Black Pawn, Empty, Empty, Occupied White Pawn, Empty],
       Row [Empty, Occupied White Pawn, Empty, Empty, Empty, Empty, Empty, Empty],
@@ -338,21 +341,21 @@ wPosition1 =
     1
 
 startingPosition :: Position
-startingPosition = Position
-  (Board
-    [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
-    , Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn]
-    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
-    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
-    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
-    , Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
-    , Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn]
-    , Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
-      ]
-  )
-  White
-  (Castling True True True True)
-  Nothing
-  0
-  1
- 
+startingPosition =
+  Position
+    ( Board
+        [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook],
+          Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn],
+          Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
+        ]
+    )
+    White
+    (Castling True True True True)
+    Nothing
+    0
+    1

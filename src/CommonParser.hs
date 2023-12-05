@@ -4,9 +4,9 @@ import Control.Applicative
 import Data.Char qualified as Char
 import Data.Functor (($>))
 import Data.List qualified as List
-import Syntax
 import Parser (Parser)
 import Parser qualified as P
+import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 
 constP :: String -> a -> Parser a
@@ -51,7 +51,7 @@ colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha'
 emptySquaresP :: Parser [Square]
 emptySquaresP =
   (`replicate` Empty)
-  <$> P.filter (\n -> n <= 8 && n >= 1) P.int
+    <$> P.filter (\n -> n <= 8 && n >= 1) P.int
 
 occupiedSquareP :: Parser Square
 occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
@@ -59,24 +59,24 @@ occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
 fileP :: Parser File
 fileP =
   constCharP 'a' A
-  <|> constCharP 'b' B
-  <|> constCharP 'c' C
-  <|> constCharP 'd' D
-  <|> constCharP 'e' E
-  <|> constCharP 'f' F
-  <|> constCharP 'g' G
-  <|> constCharP 'h' H
+    <|> constCharP 'b' B
+    <|> constCharP 'c' C
+    <|> constCharP 'd' D
+    <|> constCharP 'e' E
+    <|> constCharP 'f' F
+    <|> constCharP 'g' G
+    <|> constCharP 'h' H
 
 rankP :: Parser Rank
 rankP =
   constCharP '1' R1
-  <|> constCharP '2' R2
-  <|> constCharP '3' R3
-  <|> constCharP '4' R4
-  <|> constCharP '5' R5
-  <|> constCharP '6' R6
-  <|> constCharP '7' R7
-  <|> constCharP '8' R8
+    <|> constCharP '2' R2
+    <|> constCharP '3' R3
+    <|> constCharP '4' R4
+    <|> constCharP '5' R5
+    <|> constCharP '6' R6
+    <|> constCharP '7' R7
+    <|> constCharP '8' R8
 
 coordinateP :: Parser Coordinate
 coordinateP = Coordinate <$> fileP <*> rankP

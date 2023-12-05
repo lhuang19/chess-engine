@@ -1,15 +1,14 @@
 module Lib
-    (
-      module CommonParser,
-      module FENParser,
-      module MoveParser,
-      module Print,
-      module Syntax,
-    ) where
+  ( module CommonParser,
+    module FENParser,
+    module MoveParser,
+    module Print,
+    module Syntax,
+  )
+where
 
-import qualified CommonParser
-import qualified FENParser
-import qualified MoveParser
-import qualified Print
-import qualified Syntax
-
+import CommonParser qualified
+import FENParser qualified
+import MoveParser qualified
+import Print qualified
+import Syntax qualified

@@ -1,20 +1,17 @@
 module Print
   ( pretty,
     PP (..),
-    )
-
+  )
 where
 
-
-import Text.PrettyPrint (Doc, (<+>))
-import qualified Text.PrettyPrint as PP
-
 import Syntax
+import Text.PrettyPrint (Doc, (<+>))
+import Text.PrettyPrint qualified as PP
 
 class PP a where
   pp :: a -> Doc
 
-pretty :: PP a => a -> String
+pretty :: (PP a) => a -> String
 pretty = PP.render . pp
 
 instance PP Piece where
@@ -46,17 +43,16 @@ filePrint :: Doc
 filePrint = pad ' ' $ PP.hcat (map (padBack ' ' . pp) [A, B, C, D, E, F, G, H])
 
 horizontalLine :: Char -> Doc
-horizontalLine c = pad c $ PP.hcat (map (\_ -> padBack c (PP.char c)) [0..7])
+horizontalLine c = pad c $ PP.hcat (map (\_ -> padBack c (PP.char c)) [0 .. 7])
 
 instance PP Board where
   pp (Board xs) =
-    PP.vcat
-    $ concat
-    [
-      [filePrint, horizontalLine '_'],
-      zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0..] (reverse xs),
-      [horizontalLine '‾', filePrint, PP.char '\n']
-    ]
+    PP.vcat $
+      concat
+        [ [filePrint, horizontalLine '_'],
+          zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0 ..] (reverse xs),
+          [horizontalLine '‾', filePrint, PP.char '\n']
+        ]
 
 instance PP Castling where
   pp (Castling wk wq bk bq) = PP.text "Castling" <+> PP.text (show wk) <+> PP.text (show wq) <+> PP.text (show bk) <+> PP.text (show bq)
@@ -90,9 +86,19 @@ instance PP (Maybe Coordinate) where
 
 instance PP Position where
   pp (Position b t c e h f) =
-    pp b PP.<> PP.char '\n' PP.<>
-    PP.text "turn:      " <+> pp t PP.<> PP.char '\n' PP.<>
-    PP.text "castling:  " <+> pp c PP.<> PP.char '\n' PP.<>
-    PP.text "en passant:" <+> pp e PP.<> PP.char '\n' PP.<>
-    PP.text "half moves:" <+> PP.int h PP.<> PP.char '\n' PP.<>
-    PP.text "full moves:" <+> PP.int f PP.<> PP.char '\n'
+    pp b
+      PP.<> PP.char '\n'
+      PP.<> PP.text "turn:      "
+      <+> pp t
+        PP.<> PP.char '\n'
+        PP.<> PP.text "castling:  "
+      <+> pp c
+        PP.<> PP.char '\n'
+        PP.<> PP.text "en passant:"
+      <+> pp e
+        PP.<> PP.char '\n'
+        PP.<> PP.text "half moves:"
+      <+> PP.int h
+        PP.<> PP.char '\n'
+        PP.<> PP.text "full moves:"
+      <+> PP.int f PP.<> PP.char '\n'

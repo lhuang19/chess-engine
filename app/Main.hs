@@ -1,7 +1,7 @@
 module Main where
 
-import Syntax
 import Print
+import Syntax
 
 main :: IO ()
 main = do
@@ -10,4 +10,3 @@ main = do
   putStrLn $ pretty wBoard1
   putStrLn $ pretty wPosition1
   putStrLn "Testing Syntax"
-
