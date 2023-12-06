@@ -5,6 +5,7 @@ module Moves
 where
 
 import Control.Monad (guard, (>=>))
+import Data.Bifunctor (second)
 import Data.List qualified as List
 import Data.Maybe (catMaybes, isJust, mapMaybe, maybeToList)
 import Syntax
@@ -126,19 +127,28 @@ knightCandidateMoves pos c =
 -- Candidate king moves (other than castling)
 kingCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
 kingCandidateMoves pos c =
-  stepMoves
-    pos
-    King
-    c
-    [ (succFile, succRank),
-      (succFile, predRank),
-      (predFile, succRank),
-      (predFile, predRank),
-      (Just, succRank),
-      (Just, predRank),
-      (succFile, Just),
-      (predFile, Just)
-    ]
+  map
+    (Data.Bifunctor.second disableCastling)
+    (stepMoves pos King c directions)
+  where
+    disableCastling :: Position -> Position
+    disableCastling p =
+      let currentCastling = castling p
+          newCastling = case turn p of
+            White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
+            Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
+       in p {castling = newCastling}
+
+    directions =
+      [ (succFile, succRank),
+        (succFile, predRank),
+        (predFile, succRank),
+        (predFile, predRank),
+        (Just, succRank),
+        (Just, predRank),
+        (succFile, Just),
+        (predFile, Just)
+      ]
 
 -- Simple non-pawn sliding moves (can greedily apply the move as many times as possible),
 -- transform a list of coordinates to candidate moves
@@ -169,15 +179,26 @@ bishopCandidateMoves pos c =
 -- Candidate rook moves (other than castling)
 rookCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
 rookCandidateMoves pos c =
-  slideMoves
-    pos
-    Rook
-    c
-    [ (Just, succRank),
-      (Just, predRank),
-      (succFile, Just),
-      (predFile, Just)
-    ]
+  map
+    (Data.Bifunctor.second updateCastling)
+    (slideMoves pos Rook c directions)
+  where
+    updateCastling :: Position -> Position
+    updateCastling newPos = newPos {castling = coordMapCastling c (castling newPos)}
+
+    coordMapCastling :: Coordinate -> Castling -> Castling
+    coordMapCastling (Coordinate A R1) cast = cast {whiteQueenSide = False}
+    coordMapCastling (Coordinate H R1) cast = cast {whiteKingSide = False}
+    coordMapCastling (Coordinate A R8) cast = cast {blackQueenSide = False}
+    coordMapCastling (Coordinate H R8) cast = cast {blackKingSide = False}
+    coordMapCastling _ cast = cast
+
+    directions =
+      [ (Just, succRank),
+        (Just, predRank),
+        (succFile, Just),
+        (predFile, Just)
+      ]
 
 -- Candidate queen moves
 queenCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
