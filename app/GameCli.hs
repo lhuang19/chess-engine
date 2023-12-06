@@ -2,6 +2,7 @@ module Main where
 
 import Game
 import Syntax
+import Util
 
 main :: IO ()
 main = do

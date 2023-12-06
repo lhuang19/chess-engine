@@ -7,6 +7,7 @@ where
 import Syntax
 import Text.PrettyPrint (Doc, (<+>))
 import Text.PrettyPrint qualified as PP
+import Util
 
 class PP a where
   pp :: a -> Doc

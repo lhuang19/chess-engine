@@ -1,161 +1,251 @@
 module Moves
-  ( pawnMoves,
-    knightMoves,
-    bishopMoves,
-    rookMoves,
-    queenMoves,
-    kingMoves,
-    validMoves,
-    validCastle,
-    test_all,
+  ( validMoves,
+    makeMove,
   )
 where
 
-import Control.Monad ((>=>))
+import Control.Monad (guard, (>=>))
 import Data.List qualified as List
-import Data.Maybe (catMaybes, maybeToList)
+import Data.Maybe (catMaybes, isJust, mapMaybe, maybeToList)
 import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
+import Test.QuickCheck (Arbitrary (..), Gen, choose, elements, oneof, vector)
+import Text.Printf (printf)
+import Util
 
-validFrom :: Position -> Coordinate -> Piece -> Bool
-validFrom (Position b t _ _ _ _) c p = squareAt b c == Occupied t p
+-- NOTE:
+-- "candidate moves" do not take into account the rule that you can't move into check
+-- "valid moves" do take into account this rule, and are actually playable
 
--- | pawn
-pawnWhiteDir :: Coordinate -> [Dir]
-pawnWhiteDir (Coordinate _ r) = do
-  let moves = [Dir CannotCapture [SR], Dir MustCapture [PF, SR], Dir MustCapture [SF, SR]]
-  if r == R2 --
-    then moves ++ [Dir CannotCapture [SR, SR]]
-    else moves
+-- Properly update all the turn-related fields in the position record
+-- The first param is pawnMoveOrCapture, denoting whether either
+-- a pawn has just been moved or a piece has just been captured
+changeTurn :: Bool -> Position -> Position
+changeTurn pawnMoveOrCapture pos =
+  pos
+    { turn = flipColor $ turn pos,
+      enPassant = Nothing,
+      halfMoveClock = if pawnMoveOrCapture then 0 else 1 + halfMoveClock pos,
+      fullMoveNumber = 1 + fullMoveNumber pos
+    }
 
-pawnDirs :: Coordinate -> Color -> [Dir]
-pawnDirs (Coordinate _ r) c = case c of
-  White -> pawnWhiteDir (Coordinate A r)
-  Black -> map dirOpposite $ pawnWhiteDir (Coordinate A (rankOp r))
+-- Pawn moves are the most complicated (forward, double forward, capture diagonal, EN PASSANT 😳)
+-- Naive means ignoring promotion rules
+pawnCandidateMovesNaive :: Position -> Coordinate -> [(Coordinate, Position)]
+pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f r) =
+  catMaybes
+    [ oneStep,
+      twoStep,
+      capture predFile,
+      capture succFile
+    ]
+  where
+    rankMove = if color == White then succRank else predRank
 
-pawnMoves :: Color -> Coordinate -> [Coordinate]
-pawnMoves color c = coordinateMoveMultiDir (pawnDirs c color) c
+    oneStep :: Maybe (Coordinate, Position)
+    oneStep = do
+      toRank <- rankMove r
+      let to = Coordinate f toRank
+      guard (isSquareEmpty oldBoard to)
+      let newBoard = updateBoardSimpleMove oldBoard from to
+      return (to, changeTurn True $ pos {board = newBoard})
 
-pawnValidMoves :: Position -> Coordinate -> [Coordinate]
-pawnValidMoves p c =
-  if validFrom p c Pawn
-    then coordinateMoveMultiDirValid (pawnDirs c (turn p)) p c
-    else []
+    twoStep :: Maybe (Coordinate, Position)
+    twoStep = do
+      guard (color == White && r == R2 || color == Black && r == R7) -- start rank
+      guard (isJust oneStep)
+      hopOverRank <- rankMove r
+      toRank <- rankMove hopOverRank
+      let to = Coordinate f toRank
+      guard (isSquareEmpty oldBoard to)
+      let newBoard = updateBoardSimpleMove oldBoard from to
+      let enPassantVulnerability = Coordinate f hopOverRank
+      return (to, (changeTurn True pos) {board = newBoard, enPassant = Just enPassantVulnerability})
 
--- | knight
-knightDirs :: [Dir]
-knightDirs =
-  [ Dir CanCapture [PF, PF, PR],
-    Dir CanCapture [PF, PF, SR],
-    Dir CanCapture [PF, PR, PR],
-    Dir CanCapture [PF, SR, SR],
-    Dir CanCapture [SF, SF, PR],
-    Dir CanCapture [SF, SF, SR],
-    Dir CanCapture [SF, PR, PR],
-    Dir CanCapture [SF, SR, SR]
-  ]
+    capture :: FileMove -> Maybe (Coordinate, Position)
+    capture fileMove = do
+      toFile <- fileMove f
+      toRank <- rankMove r
+      let to = Coordinate toFile toRank
+      let isEnPassant = enPassant pos == Just to
+      guard (isSquareOccupied oldBoard to || isEnPassant)
+      let enPassantVictim = Coordinate toFile r
+      let enPassantKill = if isEnPassant then updateBoard enPassantVictim Empty else id
+      let newBoard = enPassantKill $ updateBoardSimpleMove oldBoard from to
+      return (to, changeTurn True $ pos {board = newBoard})
 
-knightMoves :: Coordinate -> [Coordinate]
-knightMoves = coordinateMoveMultiDir knightDirs
+-- Candidate pawn moves (taking into account promotion rules)
+pawnCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+pawnCandidateMoves pos from =
+  let naiveMoves = pawnCandidateMovesNaive pos from
+   in let color = turn pos
+       in concatMap
+            ( \(to@(Coordinate _ toRank), newPos) ->
+                if toRank /= R1 && toRank /= R8
+                  then [(StdMove (StandardMove Pawn from to), newPos)]
+                  else
+                    map
+                      ( \p ->
+                          ( PromMove (Promotion from to p),
+                            newPos {board = updateBoard to (Occupied color p) (board newPos)}
+                          )
+                      )
+                      promotionPieces
+            )
+            naiveMoves
 
-knightValidMoves :: Position -> Coordinate -> [Coordinate]
-knightValidMoves p c =
-  if validFrom p c Knight
-    then coordinateMoveMultiDirValid knightDirs p c
-    else []
+-- Simple non-pawn step moves, transform a list of coordinates to candidate moves
+stepMoves :: Position -> Piece -> Coordinate -> [CoordinateMove] -> [(Move, Position)]
+stepMoves pos piece from ms =
+  map
+    ( \to ->
+        let oldBoard = board pos
+         in let newBoard = updateBoardSimpleMove oldBoard from to
+             in let isCapture = isSquareOccupied oldBoard to
+                 in (stdMove piece from to, changeTurn isCapture $ pos {board = newBoard})
+    )
+    $ mapMaybe (stepCoordinate pos from) ms
 
--- | bishop
-bishopDirs :: [Dir]
-bishopDirs =
-  [ Dir CanCapture [SF, SR],
-    Dir CanCapture [SF, PR],
-    Dir CanCapture [PF, SR],
-    Dir CanCapture [PF, PR]
-  ]
+-- Candidate knight moves
+knightCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+knightCandidateMoves pos c =
+  stepMoves
+    pos
+    Knight
+    c
+    [ (succFile >=> succFile, succRank),
+      (succFile >=> succFile, predRank),
+      (predFile >=> predFile, succRank),
+      (predFile >=> predFile, predRank),
+      (succFile, succRank >=> succRank),
+      (succFile, predRank >=> predRank),
+      (predFile, succRank >=> succRank),
+      (predFile, predRank >=> predRank)
+    ]
 
-bishopMoves :: Coordinate -> [Coordinate]
-bishopMoves = coordinateMovesMultiDir bishopDirs
+-- Candidate king moves (other than castling)
+kingCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+kingCandidateMoves pos c =
+  stepMoves
+    pos
+    King
+    c
+    [ (succFile, succRank),
+      (succFile, predRank),
+      (predFile, succRank),
+      (predFile, predRank),
+      (Just, succRank),
+      (Just, predRank),
+      (succFile, Just),
+      (predFile, Just)
+    ]
 
-bishopValidMoves :: Position -> Coordinate -> [Coordinate]
-bishopValidMoves p c =
-  if validFrom p c Bishop
-    then coordinateMovesMultiDirValid bishopDirs p c
-    else []
+-- Simple non-pawn sliding moves (can greedily apply the move as many times as possible),
+-- transform a list of coordinates to candidate moves
+slideMoves :: Position -> Piece -> Coordinate -> [CoordinateMove] -> [(Move, Position)]
+slideMoves pos piece from ms =
+  map
+    ( \to ->
+        let oldBoard = board pos
+         in let newBoard = updateBoardSimpleMove oldBoard from to
+             in let isCapture = isSquareOccupied oldBoard to
+                 in (stdMove piece from to, changeTurn isCapture $ pos {board = newBoard})
+    )
+    $ concatMap (reachableCoordinates pos from) ms
 
--- | rook
-rookDirs :: [Dir]
-rookDirs =
-  [ Dir CanCapture [SF],
-    Dir CanCapture [PF],
-    Dir CanCapture [SR],
-    Dir CanCapture [PR]
-  ]
+-- Candidate bishop moves
+bishopCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+bishopCandidateMoves pos c =
+  slideMoves
+    pos
+    Bishop
+    c
+    [ (succFile, succRank),
+      (succFile, predRank),
+      (predFile, succRank),
+      (predFile, predRank)
+    ]
 
-rookMoves :: Coordinate -> [Coordinate]
-rookMoves = coordinateMovesMultiDir rookDirs
+-- Candidate rook moves (other than castling)
+rookCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+rookCandidateMoves pos c =
+  slideMoves
+    pos
+    Rook
+    c
+    [ (Just, succRank),
+      (Just, predRank),
+      (succFile, Just),
+      (predFile, Just)
+    ]
 
-rookValidMoves :: Position -> Coordinate -> [Coordinate]
-rookValidMoves p c =
-  if validFrom p c Rook
-    then coordinateMovesMultiDirValid rookDirs p c
-    else []
+-- Candidate queen moves
+queenCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
+queenCandidateMoves pos c =
+  slideMoves
+    pos
+    Queen
+    c
+    [ (succFile, succRank),
+      (succFile, predRank),
+      (predFile, succRank),
+      (predFile, predRank),
+      (Just, succRank),
+      (Just, predRank),
+      (succFile, Just),
+      (predFile, Just)
+    ]
 
--- | queen
-queenDirs :: [Dir]
-queenDirs = bishopDirs ++ rookDirs
+-- Candidate moves (other than castling)
+candidateNonCastlingMoves :: Position -> Coordinate -> [(Move, Position)]
+candidateNonCastlingMoves pos@(Position board color _ _ _ _) from = case squareAt board from of
+  Empty -> []
+  Occupied color piece
+    | color /= turn pos -> []
+    | otherwise -> case piece of
+        Pawn -> pawnCandidateMoves pos from
+        Knight -> knightCandidateMoves pos from
+        Bishop -> bishopCandidateMoves pos from
+        Rook -> rookCandidateMoves pos from
+        Queen -> queenCandidateMoves pos from
+        King -> kingCandidateMoves pos from
 
-queenMoves :: Coordinate -> [Coordinate]
-queenMoves = coordinateMovesMultiDir queenDirs
+-- Check if opponent can capture our king after this move
+-- (i.e. whether this is a move into check)
+moveIntoCheck :: Position -> (Move, Position) -> Bool
+moveIntoCheck (Position oldBoard color _ _ _ _) (_, newPos) =
+  -- generate all possible capturing moves for the opposite color
+  -- check if any of moves would capture our king
+  -- if so, this is a move into check
+  any
+    ( \(move, _) ->
+        let coord = moveToCoordinate color move
+         in squareAt oldBoard coord == Occupied color King
+    )
+    $ concatMap (candidateNonCastlingMoves newPos . fst)
+    $ piecesByColor (turn newPos) (board newPos)
 
-queenValidMoves :: Position -> Coordinate -> [Coordinate]
-queenValidMoves p c =
-  if validFrom p c Queen
-    then coordinateMovesMultiDirValid queenDirs p c
-    else []
+-- Like candidate moves, but with moves into check filtered out
+validNonCastlingMoves :: Position -> Coordinate -> [(Move, Position)]
+validNonCastlingMoves pos from =
+  filter (not . moveIntoCheck pos) $
+    candidateNonCastlingMoves pos from
 
--- | king
-kingDirs :: [Dir]
-kingDirs =
-  [ Dir CanCapture [SF],
-    Dir CanCapture [PF],
-    Dir CanCapture [SR],
-    Dir CanCapture [PR],
-    Dir CanCapture [SF, SR],
-    Dir CanCapture [SF, PR],
-    Dir CanCapture [PF, SR],
-    Dir CanCapture [PF, PR]
-  ]
-
-kingMoves :: Coordinate -> [Coordinate]
-kingMoves = coordinateMoveMultiDir kingDirs
-
-kingValidMoves :: Position -> Coordinate -> [Coordinate]
-kingValidMoves p c =
-  if validFrom p c King
-    then coordinateMoveMultiDirValid kingDirs p c
-    else []
-
-validMoves :: Position -> Piece -> Coordinate -> [Coordinate]
-validMoves pos p c = case p of
-  Pawn -> pawnValidMoves pos c
-  Knight -> knightValidMoves pos c
-  Bishop -> bishopValidMoves pos c
-  Rook -> rookValidMoves pos c
-  Queen -> queenValidMoves pos c
-  King -> kingValidMoves pos c
-
-coordinateInCheck :: Position -> Coordinate -> Bool
-coordinateInCheck pos@(Position b t _ _ _ _) c =
+-- Checks if any of the given coordinates are in check
+anyCoordinatesInCheck :: Position -> [Coordinate] -> Bool
+anyCoordinatesInCheck pos@(Position b t _ _ _ _) coords =
   -- generate all possible capturing moves for the opposite color
   -- check if any of those moves are the coordinate
   -- if so, then the coordinate is in check
-  elem c $
-    concatMap (\(c', p) -> validMoves pos p c') (piecesByColor (colorOp t) b)
+  let attackedCoords =
+        map (moveToCoordinate t . fst) $
+          concatMap (\(c', _) -> candidateNonCastlingMoves pos c') $
+            piecesByColor (flipColor t) b
+   in any (`elem` attackedCoords) coords
 
-validCastle :: Position -> Castle -> Bool
-validCastle pos@(Position b t c _ _ _) castle =
+isValidCastle :: Position -> Castle -> Bool
+isValidCastle pos@(Position b t c _ _ _) castle =
   eligible
-    && startingPositionsValid
     && noChecks
     && squaresInBetweenEmpty
   where
@@ -167,211 +257,129 @@ validCastle pos@(Position b t c _ _ _) castle =
 
     r = if turn pos == White then R1 else R8
 
-    castleSquares = case castle of
+    noChecks = not $ anyCoordinatesInCheck pos $ case castle of
       Kingside ->
         [ Coordinate E r,
           Coordinate F r,
-          Coordinate G r,
-          Coordinate H r
+          Coordinate G r
         ]
       Queenside ->
-        [ Coordinate E r,
+        [ Coordinate C r,
           Coordinate D r,
-          Coordinate C r,
-          Coordinate B r,
-          Coordinate A r
+          Coordinate E r
         ]
 
-    startingPositionsValid = case castle of
+    squaresInBetweenEmpty = all (\c -> squareAt b c == Empty) $ case castle of
       Kingside ->
-        validFrom pos (Coordinate E r) King
-          && validFrom pos (Coordinate H r) Rook
+        [ Coordinate F r,
+          Coordinate G r
+        ]
       Queenside ->
-        validFrom pos (Coordinate E r) King
-          && validFrom pos (Coordinate A r) Rook
+        [ Coordinate B r,
+          Coordinate C r,
+          Coordinate D r
+        ]
 
-    noChecks = not $ any (coordinateInCheck pos) castleSquares
-
-    squaresInBetweenEmpty = all (\c -> squareAt b c == Empty) castleSquares
-
-test_pawn :: Test
-test_pawn =
-  "pawn moves" ~:
-    TestList
-      [ pawnMoves White (Coordinate A R2) ~?= [Coordinate A R3, Coordinate B R3, Coordinate A R4],
-        pawnMoves White (Coordinate A R3) ~?= [Coordinate A R4, Coordinate B R4],
-        pawnMoves Black (Coordinate A R7) ~?= [Coordinate A R6, Coordinate B R6, Coordinate A R5],
-        pawnMoves Black (Coordinate A R6) ~?= [Coordinate A R5, Coordinate B R5],
-        pawnMoves White (Coordinate D R2) ~?= [Coordinate D R3, Coordinate C R3, Coordinate E R3, Coordinate D R4],
-        pawnMoves Black (Coordinate D R7) ~?= [Coordinate D R6, Coordinate E R6, Coordinate C R6, Coordinate D R5]
+validCastleMoves :: Position -> [(Move, Position)]
+validCastleMoves pos@(Position b t _ _ _ _) =
+  let rank = if t == White then R1 else R8
+   in [ let newBoard =
+              updateBoard (Coordinate E rank) Empty $
+                updateBoard (Coordinate A rank) Empty $
+                  updateBoard (Coordinate C rank) (Occupied t King) $
+                    updateBoard (Coordinate D rank) (Occupied t Rook) b
+         in (CastMove Queenside, changeTurn False $ pos {board = newBoard})
+        | isValidCastle pos Queenside
       ]
+        ++ [ let newBoard =
+                   updateBoard (Coordinate E rank) Empty $
+                     updateBoard (Coordinate H rank) Empty $
+                       updateBoard (Coordinate G rank) (Occupied t King) $
+                         updateBoard (Coordinate F rank) (Occupied t Rook) b
+              in (CastMove Kingside, changeTurn False $ pos {board = newBoard})
+             | isValidCastle pos Kingside
+           ]
 
-test_knight :: Test
-test_knight =
-  "knight moves" ~:
-    TestList
-      [ knightMoves (Coordinate A R1) ~?= [Coordinate C R2, Coordinate B R3],
-        knightMoves (Coordinate B R1) ~?= [Coordinate A R3, Coordinate D R2, Coordinate C R3],
-        knightMoves (Coordinate C R1)
-          ~?= [ Coordinate A R2,
-                Coordinate B R3,
-                Coordinate E R2,
-                Coordinate D R3
-              ],
-        knightMoves (Coordinate D R3)
-          ~?= [ Coordinate B R2,
-                Coordinate B R4,
-                Coordinate C R1,
-                Coordinate C R5,
-                Coordinate F R2,
-                Coordinate F R4,
-                Coordinate E R1,
-                Coordinate E R5
-              ]
-      ]
+-- All valid moves in the position
+validMoves :: Position -> [(Move, Position)]
+validMoves pos =
+  validCastleMoves pos
+    ++ concatMap
+      (candidateNonCastlingMoves pos . fst)
+      (piecesByColor (turn pos) (board pos))
 
-test_bishop :: Test
-test_bishop =
-  "bishop moves" ~:
-    TestList
-      [ bishopMoves (Coordinate A R1)
-          ~?= [ Coordinate B R2,
-                Coordinate C R3,
-                Coordinate D R4,
-                Coordinate E R5,
-                Coordinate F R6,
-                Coordinate G R7,
-                Coordinate H R8
-              ],
-        bishopMoves (Coordinate D R4)
-          ~?= [ Coordinate E R5,
-                Coordinate F R6,
-                Coordinate G R7,
-                Coordinate H R8,
-                Coordinate E R3,
-                Coordinate F R2,
-                Coordinate G R1,
-                Coordinate C R5,
-                Coordinate B R6,
-                Coordinate A R7,
-                Coordinate C R3,
-                Coordinate B R2,
-                Coordinate A R1
-              ]
-      ]
+-- Validate `from` coordinate of move, for more informative error feedback
+validateMoveFrom :: Position -> Coordinate -> Piece -> Either String ()
+validateMoveFrom pos from piece =
+  case squareAt (board pos) from of
+    Empty -> Left $ printf "No piece found at %s." (show from)
+    Occupied foundColor foundPiece ->
+      if foundColor /= turn pos
+        then Left "You can't move your opponent's piece."
+        else
+          if piece /= foundPiece
+            then Left $ printf "You don't have a %s on %s." (show foundPiece) (show from)
+            else Right ()
 
-test_rook :: Test
-test_rook =
-  "rook moves" ~:
-    TestList
-      [ rookMoves (Coordinate A R1)
-          ~?= [ Coordinate B R1,
-                Coordinate C R1,
-                Coordinate D R1,
-                Coordinate E R1,
-                Coordinate F R1,
-                Coordinate G R1,
-                Coordinate H R1,
-                Coordinate A R2,
-                Coordinate A R3,
-                Coordinate A R4,
-                Coordinate A R5,
-                Coordinate A R6,
-                Coordinate A R7,
-                Coordinate A R8
-              ],
-        rookMoves (Coordinate D R4)
-          ~?= [ Coordinate E R4,
-                Coordinate F R4,
-                Coordinate G R4,
-                Coordinate H R4,
-                Coordinate C R4,
-                Coordinate B R4,
-                Coordinate A R4,
-                Coordinate D R5,
-                Coordinate D R6,
-                Coordinate D R7,
-                Coordinate D R8,
-                Coordinate D R3,
-                Coordinate D R2,
-                Coordinate D R1
-              ]
-      ]
+-- Validate `to` coordinate of move, for more informative error feedback
+validateMoveTo :: Position -> Coordinate -> Either String ()
+validateMoveTo pos to =
+  case squareAt (board pos) to of
+    Empty -> Right ()
+    Occupied foundColor _ ->
+      if foundColor == turn pos
+        then Left $ printf "You can't capture your own piece on %s." (show to)
+        else Right ()
 
-test_queen :: Test
-test_queen =
-  "queen moves" ~:
-    TestList
-      [ queenMoves (Coordinate A R1)
-          ~?= [ Coordinate B R2,
-                Coordinate C R3,
-                Coordinate D R4,
-                Coordinate E R5,
-                Coordinate F R6,
-                Coordinate G R7,
-                Coordinate H R8,
-                Coordinate B R1,
-                Coordinate C R1,
-                Coordinate D R1,
-                Coordinate E R1,
-                Coordinate F R1,
-                Coordinate G R1,
-                Coordinate H R1,
-                Coordinate A R2,
-                Coordinate A R3,
-                Coordinate A R4,
-                Coordinate A R5,
-                Coordinate A R6,
-                Coordinate A R7,
-                Coordinate A R8
-              ],
-        queenMoves (Coordinate D R4)
-          ~?= [ Coordinate E R5,
-                Coordinate F R6,
-                Coordinate G R7,
-                Coordinate H R8,
-                Coordinate E R3,
-                Coordinate F R2,
-                Coordinate G R1,
-                Coordinate C R5,
-                Coordinate B R6,
-                Coordinate A R7,
-                Coordinate C R3,
-                Coordinate B R2,
-                Coordinate A R1,
-                Coordinate E R4,
-                Coordinate F R4,
-                Coordinate G R4,
-                Coordinate H R4,
-                Coordinate C R4,
-                Coordinate B R4,
-                Coordinate A R4,
-                Coordinate D R5,
-                Coordinate D R6,
-                Coordinate D R7,
-                Coordinate D R8,
-                Coordinate D R3,
-                Coordinate D R2,
-                Coordinate D R1
-              ]
-      ]
+makeMove :: Position -> Move -> Either String Position
+makeMove pos move@(StdMove (StandardMove piece from to)) =
+  do
+    validateMoveFrom pos from piece
+    validateMoveTo pos to
+    case List.find ((== move) . fst) (validNonCastlingMoves pos from) of
+      Just (_, newPos) -> Right newPos
+      Nothing ->
+        Left $
+          printf
+            "You can't move your %s from %s to %s"
+            (show piece)
+            (show from)
+            (show to)
+makeMove pos move@(PromMove (Promotion from to piece)) =
+  do
+    validateMoveFrom pos from Pawn
+    validateMoveTo pos to
+    case List.find ((== move) . fst) (validNonCastlingMoves pos from) of
+      Just (_, newPos) -> Right newPos
+      Nothing ->
+        Left $
+          printf
+            "Your can't promote your pawn to a %s from %s to %s"
+            (show piece)
+            (show from)
+            (show to)
+makeMove pos move@(CastMove castle) =
+  case List.find ((== move) . fst) (validCastleMoves pos) of
+    Just (_, newPos) -> Right newPos
+    Nothing -> Left $ printf "You can't castle" (show castle)
 
-test_king :: Test
-test_king =
-  "king moves" ~:
-    TestList
-      [ kingMoves (Coordinate A R1) ~?= [Coordinate B R1, Coordinate A R2, Coordinate B R2],
-        kingMoves (Coordinate D R4)
-          ~?= [ Coordinate E R4,
-                Coordinate C R4,
-                Coordinate D R5,
-                Coordinate D R3,
-                Coordinate E R5,
-                Coordinate E R3,
-                Coordinate C R5,
-                Coordinate C R3
-              ]
-      ]
+------------------------------------------------
+
+instance Arbitrary Position where
+  arbitrary = do
+    steps <- choose (0, 30) -- Decide how many steps to apply
+    applyMoves startingPosition steps
+
+-- Function to recursively apply a random valid move
+applyMoves :: Position -> Int -> Gen Position
+applyMoves pos 0 = return pos
+applyMoves pos n = do
+  let moves = validMoves pos
+  if null moves
+    then return pos -- No more valid moves
+    else do
+      (move, newPos) <- elements moves
+      applyMoves newPos (n - 1)
 
 test_position1 :: Position
 test_position1 =
@@ -417,93 +425,3 @@ test_position2 =
 -- test_position3 = Position
 --   (Board
 --     [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
-
-test_validPawn :: Test
-test_validPawn =
-  "valid pawn moves" ~:
-    TestList
-      [ pawnValidMoves test_position1 (Coordinate A R2) ~?= [Coordinate A R3, Coordinate A R4],
-        pawnValidMoves test_position1 (Coordinate D R2) ~?= [Coordinate D R3, Coordinate D R4],
-        pawnValidMoves test_position2 (Coordinate A R7) ~?= [Coordinate A R6, Coordinate A R5],
-        pawnValidMoves test_position2 (Coordinate D R7) ~?= [Coordinate D R6, Coordinate D R5],
-        pawnValidMoves test_position1 (Coordinate D R3) ~?= []
-      ]
-
-test_validKnight :: Test
-test_validKnight =
-  "valid knight moves" ~:
-    TestList
-      [ knightValidMoves test_position1 (Coordinate B R1)
-          ~?= [ Coordinate A R3,
-                Coordinate C R3
-              ],
-        knightValidMoves test_position1 (Coordinate C R1) ~?= [],
-        knightValidMoves test_position1 (Coordinate G R1)
-          ~?= [ Coordinate F R3,
-                Coordinate H R3
-              ],
-        knightValidMoves test_position2 (Coordinate B R8)
-          ~?= [ Coordinate A R6,
-                Coordinate C R6
-              ],
-        knightValidMoves test_position2 (Coordinate C R8) ~?= [],
-        knightValidMoves test_position2 (Coordinate G R8)
-          ~?= [ Coordinate F R6,
-                Coordinate H R6
-              ],
-        knightValidMoves test_position1 (Coordinate G R8) ~?= []
-      ]
-
-test_validBishop :: Test
-test_validBishop =
-  "valid bishop moves" ~:
-    TestList
-      [ bishopValidMoves test_position1 (Coordinate C R1) ~?= [],
-        bishopValidMoves test_position1 (Coordinate F R1) ~?= [],
-        bishopValidMoves test_position2 (Coordinate C R8) ~?= [],
-        bishopValidMoves test_position2 (Coordinate F R8) ~?= []
-      ]
-
-test_validRook :: Test
-test_validRook =
-  "valid rook moves" ~:
-    TestList
-      [ rookValidMoves test_position1 (Coordinate A R1) ~?= [],
-        rookValidMoves test_position1 (Coordinate H R1) ~?= [],
-        rookValidMoves test_position2 (Coordinate A R8) ~?= [],
-        rookValidMoves test_position2 (Coordinate H R8) ~?= []
-      ]
-
-test_validQueen :: Test
-test_validQueen =
-  "valid queen moves" ~:
-    TestList
-      [ queenValidMoves test_position1 (Coordinate D R1) ~?= [],
-        queenValidMoves test_position2 (Coordinate D R8) ~?= []
-      ]
-
-test_validKing :: Test
-test_validKing =
-  "valid king moves" ~:
-    TestList
-      [ kingValidMoves test_position1 (Coordinate E R1) ~?= [],
-        kingValidMoves test_position2 (Coordinate E R8) ~?= []
-      ]
-
-test_all :: IO Counts
-test_all =
-  runTestTT $
-    TestList
-      [ test_pawn,
-        test_knight,
-        test_bishop,
-        test_rook,
-        test_queen,
-        test_king,
-        test_validPawn,
-        test_validKnight,
-        test_validBishop,
-        test_validRook,
-        test_validQueen,
-        test_validKing
-      ]

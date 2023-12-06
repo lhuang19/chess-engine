@@ -1,3 +1,7 @@
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+
+{-# HLINT ignore "Use lambda-case" #-}
+
 -- | A small, applicative-based parsing library
 -- NOTE: this library does not export the `P` data constructor.
 -- All `Parser`s must be built using the following functions
@@ -35,6 +39,7 @@ module Parser
     sepBy1,
     sepBy,
     optional,
+    hasChar,
   )
 where
 
@@ -42,8 +47,10 @@ import Control.Applicative (Alternative (..))
 import Control.Monad (guard)
 import Data.Char
 import Data.Foldable (asum)
+import Data.Functor (($>))
 import System.IO qualified as IO
 import System.IO.Error qualified as IO
+import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 import Text.Read (readMaybe)
 import Prelude hiding (filter)
 
@@ -215,3 +222,6 @@ sepBy1 p sep = (:) <$> p <*> many (sep *> p)
 
 optional :: Parser a -> Parser (Maybe a)
 optional p = Just <$> p <|> pure Nothing
+
+hasChar :: Char -> Parser Bool
+hasChar c = (char c $> True) <|> pure False

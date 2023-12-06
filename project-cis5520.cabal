@@ -41,7 +41,6 @@ library
       common-stanza
   exposed-modules:
       Lib
-
       CommonParser
       FENParser
       MoveParser
@@ -49,6 +48,7 @@ library
       Parser
       Print
       Syntax
+      Util
       Game
   hs-source-dirs:
       src

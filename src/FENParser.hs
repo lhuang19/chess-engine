@@ -5,10 +5,13 @@ import Control.Applicative
 import Data.Char qualified as Char
 import Data.Functor (($>))
 import Data.List qualified as List
+import Moves
 import Parser (Parser)
 import Parser qualified as P
 import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
+import Test.QuickCheck qualified as QC
+import Util
 
 -- | parsers
 rowP :: Parser Row
@@ -30,24 +33,7 @@ turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' |
 
 castlingP :: Parser Castling
 castlingP =
-  P.choice
-    [ P.string "KQkq" $> Castling True True True True,
-      P.string "KQk" $> Castling True True True False,
-      P.string "KQq" $> Castling True True False True,
-      P.string "KQ" $> Castling True True False False,
-      P.string "Kkq" $> Castling True False True True,
-      P.string "Kk" $> Castling True False True False,
-      P.string "Kq" $> Castling True False False True,
-      P.string "K" $> Castling True False False False,
-      P.string "Qkq" $> Castling False True True True,
-      P.string "Qk" $> Castling False True True False,
-      P.string "Qq" $> Castling False True False True,
-      P.string "Q" $> Castling False True False False,
-      P.string "kq" $> Castling False False True True,
-      P.string "k" $> Castling False False True False,
-      P.string "q" $> Castling False False False True,
-      P.string "-" $> Castling False False False False
-    ]
+  Castling <$> P.hasChar 'K' <*> P.hasChar 'Q' <*> P.hasChar 'k' <*> P.hasChar 'q'
 
 enPassantP :: Parser (Maybe Coordinate)
 enPassantP =
@@ -59,8 +45,8 @@ enPassantP =
 halfMoveClockP :: Parser Int
 halfMoveClockP = P.filter (>= 0) P.int
 
-fullMoveClockP :: Parser Int
-fullMoveClockP = P.filter (>= 1) P.int
+fullMoveNumberP :: Parser Int
+fullMoveNumberP = P.filter (>= 1) P.int
 
 fenP :: Parser Position
 fenP =
@@ -75,7 +61,7 @@ fenP =
     <* P.space
     <*> halfMoveClockP
     <* P.space
-    <*> fullMoveClockP
+    <*> fullMoveNumberP
     <* P.eof
 
 parseBoard :: String -> Either P.ParseError Board
@@ -86,18 +72,18 @@ parseFEN = P.parse fenP
 
 squareToFEN :: Square -> String
 squareToFEN Empty = "1"
-squareToFEN (Occupied Black Pawn) = "p"
-squareToFEN (Occupied Black Knight) = "n"
-squareToFEN (Occupied Black Bishop) = "b"
-squareToFEN (Occupied Black Rook) = "r"
-squareToFEN (Occupied Black Queen) = "q"
-squareToFEN (Occupied Black King) = "k"
-squareToFEN (Occupied White Pawn) = "P"
-squareToFEN (Occupied White Knight) = "N"
-squareToFEN (Occupied White Bishop) = "B"
-squareToFEN (Occupied White Rook) = "R"
-squareToFEN (Occupied White Queen) = "Q"
-squareToFEN (Occupied White King) = "K"
+squareToFEN (Occupied color piece) = case color of
+  Black -> [Char.toLower pieceChar]
+  White -> [pieceChar]
+  where
+    pieceChar :: Char
+    pieceChar = case piece of
+      Pawn -> 'P'
+      Knight -> 'N'
+      Bishop -> 'B'
+      Rook -> 'R'
+      Queen -> 'Q'
+      King -> 'K'
 
 rowToFEN :: Row -> String
 rowToFEN (Row xs) =
@@ -106,15 +92,8 @@ rowToFEN (Row xs) =
   foldr
     ( \x acc ->
         case (x, acc) of
-          (Empty, '1' : xs) -> '2' : xs
-          (Empty, '2' : xs) -> '3' : xs
-          (Empty, '3' : xs) -> '4' : xs
-          (Empty, '4' : xs) -> '5' : xs
-          (Empty, '5' : xs) -> '6' : xs
-          (Empty, '6' : xs) -> '7' : xs
-          (Empty, '7' : xs) -> '8' : xs
-          (Empty, '8' : xs) -> '9' : xs
-          (_, xs) -> squareToFEN x ++ ' ' : xs
+          (Empty, x : xs) | Char.isDigit x -> succ x : xs
+          (_, xs) -> squareToFEN x ++ xs
     )
     ""
     xs
@@ -141,8 +120,8 @@ enPassantToFEN (Just (Coordinate f r)) = show f ++ show r
 halfMoveClockToFEN :: Int -> String
 halfMoveClockToFEN = show
 
-fullMoveClockToFEN :: Int -> String
-fullMoveClockToFEN = show
+fullMoveNumberToFEN :: Int -> String
+fullMoveNumberToFEN = show
 
 posToFEN :: Position -> String
 posToFEN (Position b t c e h f) =
@@ -156,7 +135,7 @@ posToFEN (Position b t c e h f) =
     ++ " "
     ++ halfMoveClockToFEN h
     ++ " "
-    ++ fullMoveClockToFEN f
+    ++ fullMoveNumberToFEN f
 
 test_piece :: Test
 test_piece =
@@ -299,13 +278,13 @@ test_halfMoveClock =
         P.parse halfMoveClockP "-1" ~?= Left "No parses"
       ]
 
-test_fullMoveClock :: Test
-test_fullMoveClock =
-  "parsing fullMoveClock" ~:
+test_fullMoveNumber :: Test
+test_fullMoveNumber =
+  "parsing fullMoveNumber" ~:
     TestList
-      [ P.parse fullMoveClockP "1" ~?= Right 1,
-        P.parse fullMoveClockP "a" ~?= Left "No parses",
-        P.parse fullMoveClockP "0" ~?= Left "No parses"
+      [ P.parse fullMoveNumberP "1" ~?= Right 1,
+        P.parse fullMoveNumberP "a" ~?= Left "No parses",
+        P.parse fullMoveNumberP "0" ~?= Left "No parses"
       ]
 
 test_parseFEN :: Test
@@ -349,6 +328,18 @@ test_all =
         test_castling,
         test_enPassant,
         test_halfMoveClock,
-        test_fullMoveClock,
+        test_fullMoveNumber,
         test_parseFEN
       ]
+
+-- Helper function to test a parser
+prop_roundtrip_FEN :: Position -> Bool
+prop_roundtrip_FEN position =
+  parseFEN (posToFEN position) == Right position
+
+-- TODO: implement Arbitrary typeclass for Position
+-- by choosing random moves from initial position
+qc :: IO ()
+qc = do
+  putStrLn "rountrip_FEN"
+  QC.quickCheck prop_roundtrip_FEN

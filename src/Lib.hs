@@ -12,3 +12,4 @@ import FENParser qualified
 import MoveParser qualified
 import Print qualified
 import Syntax qualified
+import Util qualified

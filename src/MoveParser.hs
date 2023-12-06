@@ -9,6 +9,7 @@ import Parser (Parser)
 import Parser qualified as P
 import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
+import Util
 
 standardMoveP :: Parser StandardMove
 standardMoveP = StandardMove <$> pieceP <*> coordinateP <*> coordinateP <* P.eof
@@ -24,7 +25,7 @@ promotionP =
     <$ pawnP
     <*> coordinateP
     <*> coordinateP
-    <*> promotableP
+    <*> (P.char '=' *> promotableP)
     <* P.eof
 
 moveP :: Parser Move
@@ -62,11 +63,11 @@ test_promotion :: Test
 test_promotion =
   "parsing promotion" ~:
     TestList
-      [ P.parse promotionP "pe7e8q" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Queen),
-        P.parse promotionP "pe7e8n" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Knight),
-        P.parse promotionP "pe7e8b" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Bishop),
-        P.parse promotionP "pe7e8r" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Rook),
-        P.parse promotionP "pe7e8k" ~?= Left "No parses"
+      [ P.parse promotionP "pe7e8=q" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Queen),
+        P.parse promotionP "pe7e8=n" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Knight),
+        P.parse promotionP "pe7e8=b" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Bishop),
+        P.parse promotionP "pe7e8=r" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Rook),
+        P.parse promotionP "pe7e8=k" ~?= Left "No parses"
       ]
 
 test_all :: IO Counts

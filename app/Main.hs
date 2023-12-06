@@ -2,6 +2,7 @@ module Main where
 
 import Print
 import Syntax
+import Util
 
 main :: IO ()
 main = do

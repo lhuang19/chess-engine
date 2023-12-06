@@ -8,6 +8,7 @@ import Parser (Parser)
 import Parser qualified as P
 import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
+import Util
 
 constP :: String -> a -> Parser a
 constP s x = P.string s $> x
