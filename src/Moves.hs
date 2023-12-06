@@ -26,8 +26,8 @@ changeTurn pawnMoveOrCapture pos =
   pos
     { turn = flipColor $ turn pos,
       enPassant = Nothing,
-      halfMoveClock = if pawnMoveOrCapture then 0 else 1 + halfMoveClock pos,
-      fullMoveNumber = 1 + fullMoveNumber pos
+      halfMoveClock = if pawnMoveOrCapture then 0 else succ $ halfMoveClock pos,
+      fullMoveNumber = (if turn pos == Black then succ else id) (fullMoveNumber pos)
     }
 
 -- Pawn moves are the most complicated (forward, double forward, capture diagonal, EN PASSANT 😳)
