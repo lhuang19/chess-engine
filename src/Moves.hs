@@ -1,8 +1,7 @@
 module Moves
   ( validMoves,
     makeMove,
-    isCheck,
-    isCheckmate,
+    gameCondition,
   )
 where
 
@@ -23,8 +22,8 @@ import Util
 -- Properly update all the turn-related fields in the position record
 -- The first param is pawnMoveOrCapture, denoting whether either
 -- a pawn has just been moved or a piece has just been captured
-changeTurn :: Bool -> Position -> Position
-changeTurn pawnMoveOrCapture pos =
+hitClock :: Bool -> Position -> Position
+hitClock pawnMoveOrCapture pos =
   pos
     { turn = flipColor $ turn pos,
       enPassant = Nothing,
@@ -51,7 +50,7 @@ pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f
       let to = Coordinate f toRank
       guard (isSquareEmpty oldBoard to)
       let newBoard = updateBoardSimpleMove oldBoard from to
-      return (to, changeTurn True $ pos {board = newBoard})
+      return (to, hitClock True $ pos {board = newBoard})
 
     twoStep :: Maybe (Coordinate, Position)
     twoStep = do
@@ -63,7 +62,7 @@ pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f
       guard (isSquareEmpty oldBoard to)
       let newBoard = updateBoardSimpleMove oldBoard from to
       let enPassantVulnerability = Coordinate f hopOverRank
-      return (to, (changeTurn True pos) {board = newBoard, enPassant = Just enPassantVulnerability})
+      return (to, (hitClock True pos) {board = newBoard, enPassant = Just enPassantVulnerability})
 
     capture :: FileMove -> Maybe (Coordinate, Position)
     capture fileMove = do
@@ -75,7 +74,7 @@ pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f
       let enPassantVictim = Coordinate toFile r
       let enPassantKill = if isEnPassant then updateBoard enPassantVictim Empty else id
       let newBoard = enPassantKill $ updateBoardSimpleMove oldBoard from to
-      return (to, changeTurn True $ pos {board = newBoard})
+      return (to, hitClock True $ pos {board = newBoard})
 
 -- Candidate pawn moves (taking into account promotion rules)
 pawnCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
@@ -105,7 +104,7 @@ stepMoves pos piece from ms =
         let oldBoard = board pos
          in let newBoard = updateBoardSimpleMove oldBoard from to
              in let isCapture = isSquareOccupied oldBoard to
-                 in (stdMove piece from to, changeTurn isCapture $ pos {board = newBoard})
+                 in (stdMove piece from to, hitClock isCapture $ pos {board = newBoard})
     )
     $ mapMaybe (stepCoordinate pos from) ms
 
@@ -130,13 +129,13 @@ knightCandidateMoves pos c =
 kingCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
 kingCandidateMoves pos c =
   map
-    (Data.Bifunctor.second disableCastling)
+    (second disableCastling)
     (stepMoves pos King c directions)
   where
     disableCastling :: Position -> Position
     disableCastling p =
       let currentCastling = castling p
-          newCastling = case turn p of
+          newCastling = case turn pos of
             White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
             Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
        in p {castling = newCastling}
@@ -161,7 +160,7 @@ slideMoves pos piece from ms =
         let oldBoard = board pos
          in let newBoard = updateBoardSimpleMove oldBoard from to
              in let isCapture = isSquareOccupied oldBoard to
-                 in (stdMove piece from to, changeTurn isCapture $ pos {board = newBoard})
+                 in (stdMove piece from to, hitClock isCapture $ pos {board = newBoard})
     )
     $ concatMap (reachableCoordinates pos from) ms
 
@@ -180,13 +179,13 @@ bishopCandidateMoves pos c =
 
 -- Candidate rook moves (other than castling)
 rookCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
-rookCandidateMoves pos c =
+rookCandidateMoves pos from =
   map
-    (Data.Bifunctor.second updateCastling)
-    (slideMoves pos Rook c directions)
+    (second updateCastling)
+    (slideMoves pos Rook from directions)
   where
     updateCastling :: Position -> Position
-    updateCastling newPos = newPos {castling = coordMapCastling c (castling newPos)}
+    updateCastling newPos = newPos {castling = coordMapCastling from (castling newPos)}
 
     coordMapCastling :: Coordinate -> Castling -> Castling
     coordMapCastling (Coordinate A R1) cast = cast {whiteQueenSide = False}
@@ -233,25 +232,26 @@ candidateNonCastlingMoves pos@(Position board color _ _ _ _) from = case squareA
         Queen -> queenCandidateMoves pos from
         King -> kingCandidateMoves pos from
 
--- Check if opponent can capture our king after this move
--- (i.e. whether this is a move into check)
-moveIntoCheck :: Position -> (Move, Position) -> Bool
-moveIntoCheck (Position oldBoard color _ _ _ _) (_, newPos) =
-  -- generate all possible capturing moves for the opposite color
+-- Check if the given color is in check in the given position
+inCheck :: Color -> Position -> Bool
+inCheck color pos =
+  -- generate all candidate capturing moves for the opposite color
   -- check if any of moves would capture our king
-  -- if so, this is a move into check
-  any
-    ( \(move, _) ->
-        let coord = moveToCoordinate color move
-         in squareAt (board newPos) coord == Occupied color King
-    )
-    $ concatMap (candidateNonCastlingMoves newPos . fst)
-    $ piecesByColor (turn newPos) (board newPos)
+  -- if so, color is in check
+  let opponentColor = flipColor color
+   in let opponentTurnPos = pos {turn = opponentColor}
+       in any
+            ( \(move, _) ->
+                let coord = moveToCoordinate color move
+                 in squareAt (board pos) coord == Occupied color King
+            )
+            $ concatMap (candidateNonCastlingMoves opponentTurnPos . fst)
+            $ piecesByColor opponentColor (board pos)
 
 -- Like candidate moves, but with moves into check filtered out
 validNonCastlingMoves :: Position -> Coordinate -> [(Move, Position)]
 validNonCastlingMoves pos from =
-  filter (not . moveIntoCheck pos) $
+  filter (not . inCheck (turn pos) . snd) $
     candidateNonCastlingMoves pos from
 
 -- Checks if any of the given coordinates are in check
@@ -260,14 +260,16 @@ anyCoordinatesInCheck pos@(Position b t _ _ _ _) coords =
   -- generate all possible capturing moves for the opposite color
   -- check if any of those moves are the coordinate
   -- if so, then the coordinate is in check
-  let attackedCoords =
-        map (moveToCoordinate t . fst) $
-          concatMap (\(c', _) -> candidateNonCastlingMoves pos c') $
-            piecesByColor (flipColor t) b
-   in any (`elem` attackedCoords) coords
+  let opponentColor = flipColor t
+   in let opponentTurnPos = pos {turn = opponentColor}
+       in let attackedCoords =
+                map (moveToCoordinate t . fst) $
+                  concatMap (candidateNonCastlingMoves opponentTurnPos . fst) $
+                    piecesByColor opponentColor b
+           in any (`elem` attackedCoords) coords
 
-isValidCastle :: Position -> Castle -> Bool
-isValidCastle pos@(Position b t c _ _ _) castle =
+isCandidateCastle :: Position -> Castle -> Bool
+isCandidateCastle pos@(Position b t c _ _ _) castle =
   eligible
     && noChecks
     && squaresInBetweenEmpty
@@ -303,40 +305,46 @@ isValidCastle pos@(Position b t c _ _ _) castle =
           Coordinate D r
         ]
 
-validCastleMoves :: Position -> [(Move, Position)]
-validCastleMoves pos@(Position b t _ _ _ _) =
+candidateCastleMoves :: Position -> [(Move, Position)]
+candidateCastleMoves pos@(Position b t _ _ _ _) =
   let rank = if t == White then R1 else R8
    in [ let newBoard =
               updateBoard (Coordinate E rank) Empty $
                 updateBoard (Coordinate A rank) Empty $
                   updateBoard (Coordinate C rank) (Occupied t King) $
                     updateBoard (Coordinate D rank) (Occupied t Rook) b
-         in (CastMove Queenside, updateCastling $ changeTurn False $ pos {board = newBoard})
-        | isValidCastle pos Queenside
+         in (CastMove Queenside, updateCastling t $ hitClock False $ pos {board = newBoard})
+        | isCandidateCastle pos Queenside
       ]
         ++ [ let newBoard =
                    updateBoard (Coordinate E rank) Empty $
                      updateBoard (Coordinate H rank) Empty $
                        updateBoard (Coordinate G rank) (Occupied t King) $
                          updateBoard (Coordinate F rank) (Occupied t Rook) b
-              in (CastMove Kingside, updateCastling $ changeTurn False $ pos {board = newBoard})
-             | isValidCastle pos Kingside
+              in (CastMove Kingside, updateCastling t $ hitClock False $ pos {board = newBoard})
+             | isCandidateCastle pos Kingside
            ]
   where
-    updateCastling :: Position -> Position
-    updateCastling p =
+    updateCastling :: Color -> Position -> Position
+    updateCastling t p =
       let currentCastling = castling p
-          newCastling = case turn p of
+          newCastling = case t of
             White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
             Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
        in p {castling = newCastling}
+
+-- Like candidate moves, but with moves into check filtered out
+validCastleMoves :: Position -> [(Move, Position)]
+validCastleMoves pos =
+  filter (not . inCheck (turn pos) . snd) $
+    candidateCastleMoves pos
 
 -- All valid moves in the position
 validMoves :: Position -> [(Move, Position)]
 validMoves pos =
   validCastleMoves pos
     ++ concatMap
-      (candidateNonCastlingMoves pos . fst)
+      (validNonCastlingMoves pos . fst)
       (piecesByColor (turn pos) (board pos))
 
 -- Validate `from` coordinate of move, for more informative error feedback
@@ -349,7 +357,7 @@ validateMoveFrom pos from piece =
         then Left "You can't move your opponent's piece."
         else
           if piece /= foundPiece
-            then Left $ printf "You don't have a %s on %s." (show foundPiece) (show from)
+            then Left $ printf "You don't have a %s on %s." (show piece) (show from)
             else Right ()
 
 -- Validate `to` coordinate of move, for more informative error feedback
@@ -372,13 +380,10 @@ makeMove pos move@(StdMove (StandardMove piece from to)) =
       Nothing ->
         Left $
           printf
-            "You can't move your %s from %s to %s \nAll valid moves for %s are:\n%s\n%s"
+            "You can't move your %s from %s to %s."
             (show piece)
             (show from)
             (show to)
-            (show piece)
-            (show $ map ((\(StdMove (StandardMove _ _ t)) -> t) . fst) $ validNonCastlingMoves pos from)
-            (show $ map ((\(StdMove (StandardMove _ _ t)) -> t)  . fst) $ candidateNonCastlingMoves pos from)
 makeMove pos move@(PromMove (Promotion from to piece)) =
   do
     validateMoveFrom pos from Pawn
@@ -388,37 +393,35 @@ makeMove pos move@(PromMove (Promotion from to piece)) =
       Nothing ->
         Left $
           printf
-            "Your can't promote your pawn to a %s from %s to %s"
+            "Your can't promote your Pawn to a %s from %s to %s."
             (show piece)
             (show from)
             (show to)
 makeMove pos move@(CastMove castle) =
   do
-    validateCastle
     case List.find ((== move) . fst) (validCastleMoves pos) of
       Just (_, newPos) -> Right newPos
-      Nothing -> Left $ printf "You can't castle" (show castle)
+      Nothing -> Left $ printf "You can't castle %s." (show castle)
 
-  where
-    validateCastle =
-      let (from, to) =
-            case (turn pos, castle) of
-              (White, Kingside)  -> (Coordinate E R1, Coordinate H R1)
-              (White, Queenside) -> (Coordinate E R1, Coordinate A R1)
-              (Black, Kingside)  -> (Coordinate E R8, Coordinate H R8)
-              (Black, Queenside) -> (Coordinate E R8, Coordinate A R8)
-      in
-        validateMoveFrom pos from King >> validateMoveTo pos to
+hasMoves :: Position -> Bool
+hasMoves = not . null . validMoves
 
--- TODO finish this logic
-isCheck :: Position -> Bool
-isCheck pos =
-  anyCoordinatesInCheck pos [kingCoord]
-  where
-    kingCoord = head $ map fst $ filter (\(_, piece) -> piece == King) $ piecesByColor (turn pos) (board pos)
-
-isCheckmate :: Position -> Bool
-isCheckmate pos = isCheck pos && null (validMoves pos)
+gameCondition :: Position -> GameCondition
+gameCondition pos =
+  if halfMoveClock pos >= 50
+    then FiftyMoveDraw
+    else
+      let canMove = hasMoves pos
+       in let check = inCheck (turn pos) pos
+           in if canMove
+                then
+                  if check
+                    then Check
+                    else Normal
+                else
+                  if check
+                    then Checkmate
+                    else Stalemate
 
 ------------------------------------------------
 

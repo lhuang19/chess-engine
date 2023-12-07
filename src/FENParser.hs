@@ -23,7 +23,7 @@ rowP =
 
 boardP :: Parser Board
 boardP =
-  Board
+  Board . reverse
     <$> P.filter
       (\xs -> List.length xs == 8)
       (P.sepBy1 rowP (P.char '/'))
@@ -34,11 +34,9 @@ turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' |
 castlingP :: Parser Castling
 castlingP =
   P.choice
-    [
-      constP "-" (Castling False False False False),
+    [ constP "-" (Castling False False False False),
       Castling <$> P.hasChar 'K' <*> P.hasChar 'Q' <*> P.hasChar 'k' <*> P.hasChar 'q'
     ]
-
 
 enPassantP :: Parser (Maybe Coordinate)
 enPassantP =
@@ -104,7 +102,7 @@ rowToFEN (Row xs) =
     xs
 
 boardToFEN :: Board -> String
-boardToFEN (Board rs) = List.intercalate "/" $ map rowToFEN rs
+boardToFEN (Board rs) = List.intercalate "/" $ reverse $ map rowToFEN rs
 
 turnToFEN :: Color -> String
 turnToFEN White = "w"

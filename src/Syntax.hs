@@ -17,6 +17,7 @@ module Syntax
     Move (..),
     Game (..),
     Dir (..),
+    GameCondition (..),
     startingPosition,
   )
 where
@@ -51,7 +52,10 @@ data Coordinate = Coordinate
   { file :: File,
     rank :: Rank
   }
-  deriving (Show, Eq)
+  deriving (Eq)
+
+instance Show Coordinate where
+  show (Coordinate f r) = show f ++ drop 1 (show r)
 
 data Dir
   = SF -- succ file
@@ -97,6 +101,13 @@ data Game
         prev :: Game
       }
   deriving (Show, Eq)
+
+data GameCondition
+  = Normal
+  | Check
+  | Checkmate
+  | Stalemate
+  | FiftyMoveDraw
 
 -- test1
 wBoard1 :: Board
