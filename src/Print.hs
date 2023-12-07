@@ -7,6 +7,7 @@ where
 import Syntax
 import Text.PrettyPrint (Doc, (<+>))
 import Text.PrettyPrint qualified as PP
+import Data.List (intersperse)
 import Util
 
 class PP a where
@@ -28,31 +29,45 @@ instance PP Color where
   pp Black = PP.char 'B'
 
 instance PP Square where
-  pp Empty = PP.text "__"
-  pp (Occupied c p) = pp c PP.<> pp p
+  pp Empty = PP.char ' '
+  pp (Occupied c p) = case (c, p) of
+    (White, Pawn) -> PP.char 'P'
+    (White, Knight) -> PP.char 'N'
+    (White, Bishop) -> PP.char 'B'
+    (White, Rook) -> PP.char 'R'
+    (White, Queen) -> PP.char 'Q'
+    (White, King) -> PP.char 'K'
+    (Black, Pawn) -> PP.char 'p'
+    (Black, Knight) -> PP.char 'n'
+    (Black, Bishop) -> PP.char 'b'
+    (Black, Rook) -> PP.char 'r'
+    (Black, Queen) -> PP.char 'q'
+    (Black, King) -> PP.char 'k'
+    
 
 instance PP Row where
   pp (Row xs) = PP.text "|" <+> PP.hcat (map (\x -> pp x <+> PP.text "| ") xs)
 
 pad :: Char -> Doc -> Doc
-pad c d = PP.text (replicate 4 c) PP.<> d
+pad c d = PP.text (replicate 2 c) PP.<> d
 
 padBack :: Char -> Doc -> Doc
-padBack c d = d PP.<> PP.text (replicate 4 c)
+padBack c d = d PP.<> PP.text (replicate 3 c)
 
 filePrint :: Doc
-filePrint = pad ' ' $ PP.hcat (map (padBack ' ' . pp) [A, B, C, D, E, F, G, H])
+filePrint = pad ' ' $ PP.hcat (PP.text "  " : map (padBack ' ' . pp) [A, B, C, D, E, F, G, H])
 
-horizontalLine :: Char -> Doc
-horizontalLine c = pad c $ PP.hcat (map (\_ -> padBack c (PP.char c)) [0 .. 7])
+horizontalLine :: Char -> Char -> Doc
+horizontalLine c1 c2 = pad ' ' $ PP.hcat (map (\_ -> padBack c1 (PP.char c2)) [0 .. 7] ++ [PP.char c2])
 
 instance PP Board where
   pp (Board xs) =
     PP.vcat $
       concat
-        [ [filePrint, horizontalLine '_'],
+        [ [filePrint, horizontalLine '_' '_'],
+          intersperse (horizontalLine '-' '+') $
           zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0 ..] (reverse xs),
-          [horizontalLine '‾', filePrint, PP.char '\n']
+          [horizontalLine '‾' '‾', filePrint, PP.char '\n']
         ]
 
 instance PP Castling where

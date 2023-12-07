@@ -1,6 +1,8 @@
 module Moves
   ( validMoves,
     makeMove,
+    isCheck,
+    isCheckmate,
   )
 where
 
@@ -241,7 +243,7 @@ moveIntoCheck (Position oldBoard color _ _ _ _) (_, newPos) =
   any
     ( \(move, _) ->
         let coord = moveToCoordinate color move
-         in squareAt oldBoard coord == Occupied color King
+         in squareAt (board newPos) coord == Occupied color King
     )
     $ concatMap (candidateNonCastlingMoves newPos . fst)
     $ piecesByColor (turn newPos) (board newPos)
@@ -309,7 +311,7 @@ validCastleMoves pos@(Position b t _ _ _ _) =
                 updateBoard (Coordinate A rank) Empty $
                   updateBoard (Coordinate C rank) (Occupied t King) $
                     updateBoard (Coordinate D rank) (Occupied t Rook) b
-         in (CastMove Queenside, changeTurn False $ pos {board = newBoard})
+         in (CastMove Queenside, updateCastling $ changeTurn False $ pos {board = newBoard})
         | isValidCastle pos Queenside
       ]
         ++ [ let newBoard =
@@ -317,9 +319,17 @@ validCastleMoves pos@(Position b t _ _ _ _) =
                      updateBoard (Coordinate H rank) Empty $
                        updateBoard (Coordinate G rank) (Occupied t King) $
                          updateBoard (Coordinate F rank) (Occupied t Rook) b
-              in (CastMove Kingside, changeTurn False $ pos {board = newBoard})
+              in (CastMove Kingside, updateCastling $ changeTurn False $ pos {board = newBoard})
              | isValidCastle pos Kingside
            ]
+  where
+    updateCastling :: Position -> Position
+    updateCastling p =
+      let currentCastling = castling p
+          newCastling = case turn p of
+            White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
+            Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
+       in p {castling = newCastling}
 
 -- All valid moves in the position
 validMoves :: Position -> [(Move, Position)]
@@ -362,10 +372,13 @@ makeMove pos move@(StdMove (StandardMove piece from to)) =
       Nothing ->
         Left $
           printf
-            "You can't move your %s from %s to %s"
+            "You can't move your %s from %s to %s \nAll valid moves for %s are:\n%s\n%s"
             (show piece)
             (show from)
             (show to)
+            (show piece)
+            (show $ map ((\(StdMove (StandardMove _ _ t)) -> t) . fst) $ validNonCastlingMoves pos from)
+            (show $ map ((\(StdMove (StandardMove _ _ t)) -> t)  . fst) $ candidateNonCastlingMoves pos from)
 makeMove pos move@(PromMove (Promotion from to piece)) =
   do
     validateMoveFrom pos from Pawn
@@ -380,9 +393,32 @@ makeMove pos move@(PromMove (Promotion from to piece)) =
             (show from)
             (show to)
 makeMove pos move@(CastMove castle) =
-  case List.find ((== move) . fst) (validCastleMoves pos) of
-    Just (_, newPos) -> Right newPos
-    Nothing -> Left $ printf "You can't castle" (show castle)
+  do
+    validateCastle
+    case List.find ((== move) . fst) (validCastleMoves pos) of
+      Just (_, newPos) -> Right newPos
+      Nothing -> Left $ printf "You can't castle" (show castle)
+
+  where
+    validateCastle =
+      let (from, to) =
+            case (turn pos, castle) of
+              (White, Kingside)  -> (Coordinate E R1, Coordinate H R1)
+              (White, Queenside) -> (Coordinate E R1, Coordinate A R1)
+              (Black, Kingside)  -> (Coordinate E R8, Coordinate H R8)
+              (Black, Queenside) -> (Coordinate E R8, Coordinate A R8)
+      in
+        validateMoveFrom pos from King >> validateMoveTo pos to
+
+-- TODO finish this logic
+isCheck :: Position -> Bool
+isCheck pos =
+  anyCoordinatesInCheck pos [kingCoord]
+  where
+    kingCoord = head $ map fst $ filter (\(_, piece) -> piece == King) $ piecesByColor (turn pos) (board pos)
+
+isCheckmate :: Position -> Bool
+isCheckmate pos = isCheck pos && null (validMoves pos)
 
 ------------------------------------------------
 

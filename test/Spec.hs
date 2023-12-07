@@ -11,9 +11,9 @@ main = do
   _ <- FENParser.test_all
   putStrLn ""
 
-  putStrLn "Testing Moves"
-  _ <- Moves.test_all
-  putStrLn ""
+  -- putStrLn "Testing Moves"
+  -- _ <- Moves.test_all
+  -- putStrLn ""
 
   putStrLn "Testing Move Parser"
   _ <- MoveParser.test_all

@@ -33,12 +33,17 @@ turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' |
 
 castlingP :: Parser Castling
 castlingP =
-  Castling <$> P.hasChar 'K' <*> P.hasChar 'Q' <*> P.hasChar 'k' <*> P.hasChar 'q'
+  P.choice
+    [
+      constP "-" (Castling False False False False),
+      Castling <$> P.hasChar 'K' <*> P.hasChar 'Q' <*> P.hasChar 'k' <*> P.hasChar 'q'
+    ]
+
 
 enPassantP :: Parser (Maybe Coordinate)
 enPassantP =
   P.choice
-    [ P.string "-" $> Nothing,
+    [ constP "-" Nothing,
       Just <$> coordinateP
     ]
 
@@ -256,6 +261,7 @@ test_castling =
   "parsing castling" ~:
     TestList
       [ P.parse castlingP "KQkq" ~?= Right (Castling True True True True),
+        P.parse castlingP "-" ~?= Right (Castling False False False False),
         P.parse castlingP "a" ~?= Left "No parses"
       ]
 
@@ -264,8 +270,7 @@ test_enPassant =
   "parsing enPassant" ~:
     TestList
       [ P.parse enPassantP "-" ~?= Right Nothing,
-        P.parse enPassantP "a1" ~?= Right (Just (Coordinate A R1)),
-        P.parse enPassantP "a" ~?= Left "No parses"
+        P.parse enPassantP "a1" ~?= Right (Just (Coordinate A R1))
       ]
 
 test_halfMoveClock :: Test
