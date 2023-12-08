@@ -119,7 +119,7 @@ rowToFEN (Row xs) =
     xs
 
 boardToFEN :: Board -> String
-boardToFEN (Board rs) = List.intercalate "/" $ reverse $ map rowToFEN rs
+boardToFEN (Board rs) = List.intercalate "/" $ map rowToFEN rs
 
 turnToFEN :: Color -> String
 turnToFEN White = "w"
@@ -135,7 +135,7 @@ castlingToFEN (Castling wk wq bk bq) =
 
 enPassantToFEN :: Maybe Coordinate -> String
 enPassantToFEN Nothing = "-"
-enPassantToFEN (Just (Coordinate f r)) = show f ++ show r
+enPassantToFEN (Just c) = show c
 
 halfMoveClockToFEN :: Int -> String
 halfMoveClockToFEN = show
@@ -357,7 +357,8 @@ prop_roundtrip_FEN :: Position -> Bool
 prop_roundtrip_FEN position =
   parseFEN (posToFEN position) == Right position
 
-qc :: IO ()
-qc = do
-  putStrLn "roundtrip_FEN"
-  QC.quickCheck prop_roundtrip_FEN
+qc :: IO [QC.Result]
+qc =
+  sequence
+    [ putStrLn "roundtrip_FEN" >> QC.quickCheckResult prop_roundtrip_FEN
+    ]

@@ -4,16 +4,23 @@ import Control.Monad (guard, (>=>))
 import Data.Bifunctor (second)
 import Data.List qualified as List
 import Data.Maybe (catMaybes, isJust, mapMaybe, maybeToList)
-import FENParser (parseFENexn)
+import FENParser (parseFENexn, posToFEN)
+import MoveParser (parseMoveExn)
 import Moves
 import Syntax
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
-import Test.QuickCheck (Arbitrary (..), Gen, choose, elements, oneof, vector)
-import Test.QuickCheck qualified as QC
+import Test.QuickCheck (Arbitrary (..), Gen, Property, Result, choose, counterexample, discard, elements, forAll, isSuccess, oneof, property, quickCheck, quickCheckResult, (==>))
 import Text.Printf (printf)
 import Util
 
+sortedValidMoves :: String -> [String]
 sortedValidMoves = List.sort . List.map (show . fst) . validMoves . parseFENexn
+
+makeMoveFEN :: [Char] -> [Char] -> Either String String
+makeMoveFEN fen moveStr =
+  let pos = parseFENexn fen
+   in let move = parseMoveExn moveStr
+       in posToFEN <$> makeMove pos move
 
 test_pawnMove :: Test
 test_pawnMove =
@@ -475,6 +482,78 @@ test_kingMove =
                 ]
       ]
 
+test_newPosition :: Test
+test_newPosition =
+  "New Position" ~:
+    TestList
+      [ "En passant vulnerability" ~:
+          makeMoveFEN "k7/8/8/8/1p6/8/P7/K7 w - - 0 1" "Pa2a4"
+            ~?= Right "k7/8/8/8/Pp6/8/8/K7 b - a3 0 1",
+        "En passant" ~:
+          makeMoveFEN "k7/8/8/8/Pp6/8/8/K7 b - a3 0 1" "Pb4a3"
+            ~?= Right "k7/8/8/8/8/p7/8/K7 w - - 0 2",
+        "Move increment" ~:
+          makeMoveFEN "k7/8/8/8/8/p7/8/K7 w - - 0 2" "Ka1a2"
+            ~?= Right "k7/8/8/8/8/p7/K7/8 b - - 1 2",
+        "Half move counter resets on capture" ~:
+          makeMoveFEN "8/k7/8/8/8/p7/K7/8 w - - 2 3" "Ka2a3"
+            ~?= Right "8/k7/8/8/8/K7/8/8 b - - 0 3",
+        "Castling resets rights white" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 3" "O-O"
+            ~?= Right "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 3",
+        "Castle long white" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 3" "O-O-O"
+            ~?= Right "r3k2r/8/8/8/8/8/8/2KR3R b kq - 1 3",
+        "Castling resets rights black" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R4RK1 b kq - 1 3" "O-O-O"
+            ~?= Right "2kr3r/8/8/8/8/8/8/R4RK1 w - - 2 4",
+        "Castle short black" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 1 3" "O-O"
+            ~?= Right "r4rk1/8/8/8/8/8/8/R3K2R w KQ - 2 4",
+        "Pawn capture left" ~:
+          makeMoveFEN "k7/8/2p1p3/3P4/8/8/8/3K4 w - - 0 1" "Pd5c6"
+            ~?= Right "k7/8/2P1p3/8/8/8/8/3K4 b - - 0 1",
+        "Pawn push" ~:
+          makeMoveFEN "k7/8/2p1p3/3P4/8/8/8/3K4 w - - 0 1" "Pd5d6"
+            ~?= Right "k7/8/2pPp3/8/8/8/8/3K4 b - - 0 1",
+        "Pawn capture right" ~:
+          makeMoveFEN "k7/8/2p1p3/3P4/8/8/8/3K4 w - - 0 1" "Pd5e6"
+            ~?= Right "k7/8/2p1P3/8/8/8/8/3K4 b - - 0 1",
+        "Knight move" ~:
+          makeMoveFEN "k6B/8/8/8/3N4/8/8/3K4 w - - 0 1" "Nd4c6"
+            ~?= Right "k6B/8/2N5/8/8/8/8/3K4 b - - 1 1",
+        "Bishop move" ~:
+          makeMoveFEN "k6B/8/8/8/3N4/8/8/3K4 w - - 0 1" "Bh8e5"
+            ~?= Right "k7/8/8/4B3/3N4/8/8/3K4 b - - 1 1",
+        "Rook move h" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 3" "Rh1h8"
+            ~?= Right "r3k2R/8/8/8/8/8/8/R3K3 b Qq - 0 3",
+        "Rook move a" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 3" "Ra1a8"
+            ~?= Right "R3k2r/8/8/8/8/8/8/4K2R b Kk - 0 3",
+        "Black rook move h" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 3" "Rh8h1"
+            ~?= Right "r3k3/8/8/8/8/8/8/R3K2r w Qq - 0 4",
+        "Black rook move a" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 3" "Ra8a1"
+            ~?= Right "4k2r/8/8/8/8/8/8/r3K2R w Kk - 0 4",
+        "Queen move" ~:
+          makeMoveFEN "r3k2r/8/8/8/1B5Q/8/8/R3K2R w KQkq - 0 3" "Qh4e7"
+            ~?= Right "r3k2r/4Q3/8/8/1B6/8/8/R3K2R b KQkq - 1 3",
+        "King move" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 3" "Ke1f2"
+            ~?= Right "r3k2r/8/8/8/8/8/5K2/R6R b kq - 1 3",
+        "Black king move" ~:
+          makeMoveFEN "r3k2r/8/8/8/8/8/8/R3K2R b KQkq - 0 3" "Ke8d7"
+            ~?= Right "r6r/3k4/8/8/8/8/8/R3K2R w KQ - 1 4",
+        "Pawn capture h8 promote" ~:
+          makeMoveFEN "r3k2r/6P1/8/8/8/8/8/R3K2R w KQkq - 0 3" "Pg7h8=Q"
+            ~?= Right "r3k2Q/8/8/8/8/8/8/R3K2R b KQq - 0 3",
+        "King capture a8" ~:
+          makeMoveFEN "r3k2r/1K6/8/8/8/8/8/R6R w kq - 0 3" "Kb7a8"
+            ~?= Right "K3k2r/8/8/8/8/8/8/R6R b k - 0 3"
+      ]
+
 test_all :: IO Counts
 test_all =
   runTestTT $
@@ -485,15 +564,58 @@ test_all =
         test_bishopMove,
         test_rookMove,
         test_queenMove,
-        test_kingMove
+        test_kingMove,
+        test_newPosition
       ]
 
--- TODO: quickcheck
--- prop_roundtrip_FEN :: Position -> Bool
--- prop_roundtrip_FEN position =
---   parseFEN (posToFEN position) == Right position
+prop_move_template :: (Position -> Move -> Position -> Property) -> Property
+prop_move_template f = forAll arbitrary $ \pos ->
+  case validMoves pos of
+    [] -> property (discard :: Property)
+    moves -> forAll (elements moves) $ \(move, newPos) ->
+      case makeMove pos move of
+        Left errMsg ->
+          counterexample
+            ( printf
+                "Failed to make move %s in pos:\n%s\nerrMsg: %s"
+                (show move)
+                (posToFEN pos)
+                errMsg
+            )
+            $ property False
+        Right newPos ->
+          f pos move newPos
 
--- qc :: IO ()
--- qc = do
---   putStrLn "roundtrip_FEN"
---   QC.quickCheck prop_roundtrip_FEN
+prop_colorFlips :: Property
+prop_colorFlips = prop_move_template $ \oldPos _ newPos ->
+  property $ turn oldPos == flipColor (turn newPos)
+
+prop_whiteClockSame :: Property
+prop_whiteClockSame = prop_move_template $ \oldPos _ newPos ->
+  turn oldPos == White ==> fullMoveNumber oldPos == fullMoveNumber newPos
+
+prop_blackClockInc :: Property
+prop_blackClockInc = prop_move_template $ \oldPos _ newPos ->
+  turn oldPos == Black ==> fullMoveNumber oldPos + 1 == fullMoveNumber newPos
+
+prop_halfMoveClock :: Property
+prop_halfMoveClock = prop_move_template $ \oldPos move newPos ->
+  let expectedClock = case move of
+        StdMove (StandardMove piece _ to) -> case piece of
+          Pawn -> 0
+          _ ->
+            if isSquareOccupied (board oldPos) to
+              then 0
+              else 1 + halfMoveClock oldPos
+        PromMove _ -> 0
+        CastMove _ -> 1 + halfMoveClock oldPos
+   in property $ halfMoveClock newPos == expectedClock
+
+qc :: IO [Result]
+qc =
+  sequence
+    [ putStrLn "prop_colorFlips" >> quickCheckResult prop_colorFlips,
+      putStrLn "prop_whiteClockSame" >> quickCheckResult prop_whiteClockSame,
+      putStrLn "prop_blackClockInc" >> quickCheckResult prop_blackClockInc,
+      putStrLn "prop_halfMoveClock" >> quickCheckResult prop_halfMoveClock
+    ]

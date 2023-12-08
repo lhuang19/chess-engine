@@ -5,26 +5,28 @@ import MoveParser qualified
 import Moves qualified
 import System.Exit (exitFailure)
 import Test.HUnit
-import Test.QuickCheck
+import Test.QuickCheck (isSuccess)
 import TestMoves qualified
 
 main :: IO ()
 main = do
   putStrLn "Testing FEN Parser"
-  fenResults <- FENParser.test_all
+  fenUnitResults <- FENParser.test_all
+  fenQCResults <- FENParser.qc
   putStrLn ""
 
   putStrLn "Testing Moves"
-  moveResults <- TestMoves.test_all
-  -- TestMoves.qc -- TODO
+  moveUnitResults <- TestMoves.test_all
+  moveQCResults <- TestMoves.qc
   putStrLn ""
 
   putStrLn "Testing Move Parser"
-  moveParserResults <- MoveParser.test_all
+  moveParserUnitResults <- MoveParser.test_all
 
-  let results = [fenResults, moveResults, moveParserResults]
+  let unitResults = [fenUnitResults, moveUnitResults, moveParserUnitResults]
+  let qcResults = fenQCResults ++ moveQCResults
 
-  unless (all testsPassed results) exitFailure
+  unless (all testsPassed unitResults && all isSuccess qcResults) exitFailure
 
 testsPassed :: Counts -> Bool
 testsPassed Counts {errors = 0, failures = 0} = True

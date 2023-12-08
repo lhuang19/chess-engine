@@ -32,6 +32,20 @@ hitClock pawnMoveOrCapture pos =
       fullMoveNumber = (if turn pos == Black then succ else id) (fullMoveNumber pos)
     }
 
+-- Properly update castling rights as a result of a move
+updateCastling :: Coordinate -> Coordinate -> Position -> Position
+updateCastling from to pos =
+  let existing = castling pos
+   in pos
+        { castling =
+            Castling
+              { whiteKingSide = from /= e1 && from /= h1 && to /= h1 && whiteKingSide existing,
+                whiteQueenSide = from /= e1 && from /= a1 && to /= a1 && whiteQueenSide existing,
+                blackKingSide = from /= e8 && from /= h8 && to /= h8 && blackKingSide existing,
+                blackQueenSide = from /= e8 && from /= a8 && to /= a8 && blackQueenSide existing
+              }
+        }
+
 -- Pawn moves are the most complicated (forward, double forward, capture diagonal, EN PASSANT 😳)
 -- Naive means ignoring promotion rules
 pawnCandidateMovesNaive :: Position -> Coordinate -> [(Coordinate, Position)]
@@ -75,7 +89,7 @@ pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f
       let enPassantVictim = Coordinate toFile r
       let enPassantKill = if isEnPassant then updateBoard enPassantVictim Empty else id
       let newBoard = enPassantKill $ updateBoardSimpleMove oldBoard from to
-      return (to, hitClock True $ pos {board = newBoard})
+      return (to, updateCastling from to $ hitClock True $ pos {board = newBoard})
 
 -- Candidate pawn moves (taking into account promotion rules)
 pawnCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
@@ -105,7 +119,11 @@ stepMoves pos piece from ms =
         let oldBoard = board pos
          in let newBoard = updateBoardSimpleMove oldBoard from to
              in let isCapture = isSquareOccupied oldBoard to
-                 in (stdMove piece from to, hitClock isCapture $ pos {board = newBoard})
+                 in ( stdMove piece from to,
+                      updateCastling from to $
+                        hitClock isCapture $
+                          pos {board = newBoard}
+                    )
     )
     $ mapMaybe (stepCoordinate pos from) ms
 
@@ -129,28 +147,19 @@ knightCandidateMoves pos c =
 -- Candidate king moves (other than castling)
 kingCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
 kingCandidateMoves pos c =
-  map
-    (second disableCastling)
-    (stepMoves pos King c directions)
-  where
-    disableCastling :: Position -> Position
-    disableCastling p =
-      let currentCastling = castling p
-          newCastling = case turn pos of
-            White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
-            Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
-       in p {castling = newCastling}
-
-    directions =
-      [ (succFile, succRank),
-        (succFile, predRank),
-        (predFile, succRank),
-        (predFile, predRank),
-        (Just, succRank),
-        (Just, predRank),
-        (succFile, Just),
-        (predFile, Just)
-      ]
+  stepMoves
+    pos
+    King
+    c
+    [ (succFile, succRank),
+      (succFile, predRank),
+      (predFile, succRank),
+      (predFile, predRank),
+      (Just, succRank),
+      (Just, predRank),
+      (succFile, Just),
+      (predFile, Just)
+    ]
 
 -- Simple non-pawn sliding moves (can greedily apply the move as many times as possible),
 -- transform a list of coordinates to candidate moves
@@ -161,7 +170,11 @@ slideMoves pos piece from ms =
         let oldBoard = board pos
          in let newBoard = updateBoardSimpleMove oldBoard from to
              in let isCapture = isSquareOccupied oldBoard to
-                 in (stdMove piece from to, hitClock isCapture $ pos {board = newBoard})
+                 in ( stdMove piece from to,
+                      updateCastling from to $
+                        hitClock isCapture $
+                          pos {board = newBoard}
+                    )
     )
     $ concatMap (reachableCoordinates pos from) ms
 
@@ -181,26 +194,15 @@ bishopCandidateMoves pos c =
 -- Candidate rook moves (other than castling)
 rookCandidateMoves :: Position -> Coordinate -> [(Move, Position)]
 rookCandidateMoves pos from =
-  map
-    (second updateCastling)
-    (slideMoves pos Rook from directions)
-  where
-    updateCastling :: Position -> Position
-    updateCastling newPos = newPos {castling = coordMapCastling from (castling newPos)}
-
-    coordMapCastling :: Coordinate -> Castling -> Castling
-    coordMapCastling (Coordinate A R1) cast = cast {whiteQueenSide = False}
-    coordMapCastling (Coordinate H R1) cast = cast {whiteKingSide = False}
-    coordMapCastling (Coordinate A R8) cast = cast {blackQueenSide = False}
-    coordMapCastling (Coordinate H R8) cast = cast {blackKingSide = False}
-    coordMapCastling _ cast = cast
-
-    directions =
-      [ (Just, succRank),
-        (Just, predRank),
-        (succFile, Just),
-        (predFile, Just)
-      ]
+  slideMoves
+    pos
+    Rook
+    from
+    [ (Just, succRank),
+      (Just, predRank),
+      (succFile, Just),
+      (predFile, Just)
+    ]
 
 -- Candidate queen moves
 queenCandidateMoves :: Position -> Coordinate -> [(Move, Position)]

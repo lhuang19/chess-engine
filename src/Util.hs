@@ -29,6 +29,12 @@ module Util
     CoordinateMove (..),
     FileMove (..),
     RankMove (..),
+    a1,
+    e1,
+    h1,
+    a8,
+    e8,
+    h8,
   )
 where
 
@@ -178,6 +184,24 @@ succRank r = case r of
   R3 -> Just R4
   R2 -> Just R3
   R1 -> Just R2
+
+a1 :: Coordinate
+a1 = Coordinate A R1
+
+e1 :: Coordinate
+e1 = Coordinate E R1
+
+h1 :: Coordinate
+h1 = Coordinate H R1
+
+a8 :: Coordinate
+a8 = Coordinate A R8
+
+e8 :: Coordinate
+e8 = Coordinate E R8
+
+h8 :: Coordinate
+h8 = Coordinate H R8
 
 type CoordinateMove = (FileMove, RankMove)
 

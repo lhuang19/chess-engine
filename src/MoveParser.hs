@@ -37,6 +37,9 @@ moveP =
 parseMove :: String -> Either P.ParseError Move
 parseMove = P.parse moveP
 
+parseMoveExn :: String -> Move
+parseMoveExn m = case parseMove m of Left e -> error (show e); Right m -> m
+
 test_standardMove :: Test
 test_standardMove =
   "parsing standard move" ~:
