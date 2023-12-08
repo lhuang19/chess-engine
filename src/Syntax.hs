@@ -74,7 +74,9 @@ data Move
 
 instance Show Move where
   show (StdMove m) = show m
-  show (CastMove c) = "Castles " ++ show c
+  show (CastMove c) = case c of
+    Kingside -> "O-O"
+    Queenside -> "O-O-O"
   show (PromMove p) = show p
 
 data Castling = Castling

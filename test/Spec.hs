@@ -16,6 +16,7 @@ main = do
 
   putStrLn "Testing Moves"
   moveResults <- TestMoves.test_all
+  -- TestMoves.qc -- TODO
   putStrLn ""
 
   putStrLn "Testing Move Parser"

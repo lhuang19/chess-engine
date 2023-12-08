@@ -10,6 +10,7 @@ import Data.Bifunctor (second)
 import Data.List qualified as List
 import Data.Maybe (catMaybes, isJust, mapMaybe, maybeToList)
 import Syntax
+import System.FilePath (isValid)
 import Test.HUnit (Counts, Test (..), runTestTT, (~:), (~?=))
 import Test.QuickCheck (Arbitrary (..), Gen, choose, elements, oneof, vector)
 import Text.Printf (printf)
@@ -268,8 +269,8 @@ anyCoordinatesInCheck pos@(Position b t _ _ _ _) coords =
                     piecesByColor opponentColor b
            in any (`elem` attackedCoords) coords
 
-isCandidateCastle :: Position -> Castle -> Bool
-isCandidateCastle pos@(Position b t c _ _ _) castle =
+isValidCastle :: Position -> Castle -> Bool
+isValidCastle pos@(Position b t c _ _ _) castle =
   eligible
     && noChecks
     && squaresInBetweenEmpty
@@ -305,8 +306,8 @@ isCandidateCastle pos@(Position b t c _ _ _) castle =
           Coordinate D r
         ]
 
-candidateCastleMoves :: Position -> [(Move, Position)]
-candidateCastleMoves pos@(Position b t _ _ _ _) =
+validCastleMoves :: Position -> [(Move, Position)]
+validCastleMoves pos@(Position b t _ _ _ _) =
   let rank = if t == White then R1 else R8
    in [ let newBoard =
               updateBoard (Coordinate E rank) Empty $
@@ -314,7 +315,7 @@ candidateCastleMoves pos@(Position b t _ _ _ _) =
                   updateBoard (Coordinate C rank) (Occupied t King) $
                     updateBoard (Coordinate D rank) (Occupied t Rook) b
          in (CastMove Queenside, updateCastling t $ hitClock False $ pos {board = newBoard})
-        | isCandidateCastle pos Queenside
+        | isValidCastle pos Queenside
       ]
         ++ [ let newBoard =
                    updateBoard (Coordinate E rank) Empty $
@@ -322,7 +323,7 @@ candidateCastleMoves pos@(Position b t _ _ _ _) =
                        updateBoard (Coordinate G rank) (Occupied t King) $
                          updateBoard (Coordinate F rank) (Occupied t Rook) b
               in (CastMove Kingside, updateCastling t $ hitClock False $ pos {board = newBoard})
-             | isCandidateCastle pos Kingside
+             | isValidCastle pos Kingside
            ]
   where
     updateCastling :: Color -> Position -> Position
@@ -332,12 +333,6 @@ candidateCastleMoves pos@(Position b t _ _ _ _) =
             White -> currentCastling {whiteKingSide = False, whiteQueenSide = False}
             Black -> currentCastling {blackKingSide = False, blackQueenSide = False}
        in p {castling = newCastling}
-
--- Like candidate moves, but with moves into check filtered out
-validCastleMoves :: Position -> [(Move, Position)]
-validCastleMoves pos =
-  filter (not . inCheck (turn pos) . snd) $
-    candidateCastleMoves pos
 
 -- All valid moves in the position
 validMoves :: Position -> [(Move, Position)]

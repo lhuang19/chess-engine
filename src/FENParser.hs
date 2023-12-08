@@ -357,9 +357,7 @@ prop_roundtrip_FEN :: Position -> Bool
 prop_roundtrip_FEN position =
   parseFEN (posToFEN position) == Right position
 
--- TODO: implement Arbitrary typeclass for Position
--- by choosing random moves from initial position
 qc :: IO ()
 qc = do
-  putStrLn "rountrip_FEN"
+  putStrLn "roundtrip_FEN"
   QC.quickCheck prop_roundtrip_FEN
