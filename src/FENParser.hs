@@ -23,7 +23,7 @@ rowP =
 
 boardP :: Parser Board
 boardP =
-  Board . reverse
+  Board
     <$> P.filter
       (\xs -> List.length xs == 8)
       (P.sepBy1 rowP (P.char '/'))
@@ -34,8 +34,22 @@ turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' |
 castlingP :: Parser Castling
 castlingP =
   P.choice
-    [ constP "-" (Castling False False False False),
-      Castling <$> P.hasChar 'K' <*> P.hasChar 'Q' <*> P.hasChar 'k' <*> P.hasChar 'q'
+    [ P.string "KQkq" $> Castling True True True True,
+      P.string "KQk" $> Castling True True True False,
+      P.string "KQq" $> Castling True True False True,
+      P.string "KQ" $> Castling True True False False,
+      P.string "Kkq" $> Castling True False True True,
+      P.string "Kk" $> Castling True False True False,
+      P.string "Kq" $> Castling True False False True,
+      P.string "K" $> Castling True False False False,
+      P.string "Qkq" $> Castling False True True True,
+      P.string "Qk" $> Castling False True True False,
+      P.string "Qq" $> Castling False True False True,
+      P.string "Q" $> Castling False True False False,
+      P.string "kq" $> Castling False False True True,
+      P.string "k" $> Castling False False True False,
+      P.string "q" $> Castling False False False True,
+      P.string "-" $> Castling False False False False
     ]
 
 enPassantP :: Parser (Maybe Coordinate)
@@ -72,6 +86,9 @@ parseBoard = P.parse boardP
 
 parseFEN :: String -> Either P.ParseError Position
 parseFEN = P.parse fenP
+
+parseFENexn :: String -> Position
+parseFENexn fen = case parseFEN fen of Left e -> error (show e); Right p -> p
 
 squareToFEN :: Square -> String
 squareToFEN Empty = "1"

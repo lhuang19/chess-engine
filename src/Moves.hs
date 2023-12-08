@@ -70,7 +70,7 @@ pawnCandidateMovesNaive pos@(Position oldBoard color _ _ _ _) from@(Coordinate f
       toRank <- rankMove r
       let to = Coordinate toFile toRank
       let isEnPassant = enPassant pos == Just to
-      guard (isSquareOccupied oldBoard to || isEnPassant)
+      guard (canCapture oldBoard color to || isEnPassant)
       let enPassantVictim = Coordinate toFile r
       let enPassantKill = if isEnPassant then updateBoard enPassantVictim Empty else id
       let newBoard = enPassantKill $ updateBoardSimpleMove oldBoard from to
@@ -440,48 +440,3 @@ applyMoves pos n = do
     else do
       (move, newPos) <- elements moves
       applyMoves newPos (n - 1)
-
-test_position1 :: Position
-test_position1 =
-  Position
-    ( Board
-        [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook],
-          Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn],
-          Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
-        ]
-    )
-    White
-    (Castling True True True True)
-    Nothing
-    0
-    1
-
-test_position2 :: Position
-test_position2 =
-  Position
-    ( Board
-        [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook],
-          Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn],
-          Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
-        ]
-    )
-    Black
-    (Castling True True True True)
-    Nothing
-    0
-    1
-
--- test_position3 :: Position
--- test_position3 = Position
---   (Board
---     [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]

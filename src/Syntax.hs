@@ -16,15 +16,19 @@ module Syntax
     Promotion (..),
     Move (..),
     Game (..),
-    Dir (..),
     GameCondition (..),
     startingPosition,
   )
 where
 
 import Control.Monad (foldM, (>=>))
+import Data.Char (toLower)
 import Data.Maybe (mapMaybe)
 import Test.QuickCheck (Arbitrary (..), elements, oneof, vector)
+
+data Color = White | Black deriving (Show, Eq)
+
+data Square = Empty | Occupied Color Piece deriving (Show, Eq)
 
 newtype Row = Row [Square] deriving (Show, Eq)
 
@@ -32,21 +36,9 @@ newtype Board = Board [Row] deriving (Show, Eq)
 
 data Piece = Pawn | Knight | Bishop | Rook | Queen | King deriving (Show, Eq)
 
-data Color = White | Black deriving (Show, Eq)
-
-data Square = Empty | Occupied Color Piece deriving (Show, Eq)
-
 data File = A | B | C | D | E | F | G | H deriving (Show, Eq, Enum, Bounded)
 
 data Rank = R1 | R2 | R3 | R4 | R5 | R6 | R7 | R8 deriving (Show, Eq, Enum, Bounded)
-
-data Castling = Castling
-  { whiteKingSide :: Bool,
-    whiteQueenSide :: Bool,
-    blackKingSide :: Bool,
-    blackQueenSide :: Bool
-  }
-  deriving (Show, Eq)
 
 data Coordinate = Coordinate
   { file :: File,
@@ -55,13 +47,42 @@ data Coordinate = Coordinate
   deriving (Eq)
 
 instance Show Coordinate where
-  show (Coordinate f r) = show f ++ drop 1 (show r)
+  show (Coordinate f r) = map toLower (show f) ++ drop 1 (show r)
 
-data Dir
-  = SF -- succ file
-  | PF -- pred file
-  | SR -- succ rank
-  | PR -- pred rank
+data StandardMove = StandardMove
+  { piece :: Piece,
+    from :: Coordinate,
+    to :: Coordinate
+  }
+  deriving (Eq)
+
+instance Show StandardMove where
+  show (StandardMove p from to) = show p ++ " " ++ show from ++ " to " ++ show to
+
+data Castle = Kingside | Queenside deriving (Show, Eq)
+
+data Promotion = Promotion Coordinate Coordinate Piece deriving (Eq)
+
+instance Show Promotion where
+  show (Promotion from to p) = "Pawn " ++ show from ++ " to " ++ show to ++ " =" ++ show p
+
+data Move
+  = StdMove StandardMove
+  | CastMove Castle
+  | PromMove Promotion
+  deriving (Eq)
+
+instance Show Move where
+  show (StdMove m) = show m
+  show (CastMove c) = "Castles " ++ show c
+  show (PromMove p) = show p
+
+data Castling = Castling
+  { whiteKingSide :: Bool,
+    whiteQueenSide :: Bool,
+    blackKingSide :: Bool,
+    blackQueenSide :: Bool
+  }
   deriving (Show, Eq)
 
 data Position = Position
@@ -72,25 +93,6 @@ data Position = Position
     halfMoveClock :: Int,
     fullMoveNumber :: Int
   }
-  deriving (Show, Eq)
-
--- Assume user puts in relatively well formed data
-
-data StandardMove = StandardMove
-  { piece :: Piece,
-    from :: Coordinate,
-    to :: Coordinate
-  }
-  deriving (Show, Eq)
-
-data Castle = Kingside | Queenside deriving (Show, Eq)
-
-data Promotion = Promotion Coordinate Coordinate Piece deriving (Show, Eq)
-
-data Move
-  = StdMove StandardMove
-  | CastMove Castle
-  | PromMove Promotion
   deriving (Show, Eq)
 
 data Game
@@ -137,14 +139,14 @@ startingPosition :: Position
 startingPosition =
   Position
     ( Board
-        [ Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook],
-          Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+        [ Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook],
           Row [Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn, Occupied Black Pawn],
-          Row [Occupied Black Rook, Occupied Black Knight, Occupied Black Bishop, Occupied Black Queen, Occupied Black King, Occupied Black Bishop, Occupied Black Knight, Occupied Black Rook]
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
+          Row [Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn, Occupied White Pawn],
+          Row [Occupied White Rook, Occupied White Knight, Occupied White Bishop, Occupied White Queen, Occupied White King, Occupied White Bishop, Occupied White Knight, Occupied White Rook]
         ]
     )
     White

@@ -4,10 +4,10 @@ module Print
   )
 where
 
+import Data.List (intersperse)
 import Syntax
 import Text.PrettyPrint (Doc, (<+>))
 import Text.PrettyPrint qualified as PP
-import Data.List (intersperse)
 import Util
 
 class PP a where
@@ -43,7 +43,6 @@ instance PP Square where
     (Black, Rook) -> PP.char 'r'
     (Black, Queen) -> PP.char 'q'
     (Black, King) -> PP.char 'k'
-    
 
 instance PP Row where
   pp (Row xs) = PP.text "|" <+> PP.hcat (map (\x -> pp x <+> PP.text "| ") xs)
@@ -66,7 +65,7 @@ instance PP Board where
       concat
         [ [filePrint, horizontalLine '_' '_'],
           intersperse (horizontalLine '-' '+') $
-          zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0 ..] (reverse xs),
+            zipWith (\i x -> PP.int (8 - i) <+> pp x <+> PP.int (8 - i)) [0 ..] xs,
           [horizontalLine '‾' '‾', filePrint, PP.char '\n']
         ]
 

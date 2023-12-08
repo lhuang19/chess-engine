@@ -39,7 +39,6 @@ module Parser
     sepBy1,
     sepBy,
     optional,
-    hasChar,
   )
 where
 
@@ -222,6 +221,3 @@ sepBy1 p sep = (:) <$> p <*> many (sep *> p)
 
 optional :: Parser a -> Parser (Maybe a)
 optional p = Just <$> p <|> pure Nothing
-
-hasChar :: Char -> Parser Bool
-hasChar c = (char c $> True) <|> pure False

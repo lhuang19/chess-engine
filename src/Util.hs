@@ -22,6 +22,7 @@ module Util
     squareAt,
     isSquareEmpty,
     isSquareOccupied,
+    canCapture,
     canMoveOrCapture,
     stepCoordinate,
     reachableCoordinates,
@@ -40,15 +41,15 @@ annotatedBoard :: Board -> [(Coordinate, Square)]
 annotatedBoard (Board rows) =
   concat $
     zipWith
-      ( \i (Row squares) ->
+      ( \r (Row squares) ->
           zipWith
-            ( \j square ->
-                (Coordinate j i, square)
+            ( \f square ->
+                (Coordinate f r, square)
             )
             [A .. H]
             squares
       )
-      [R1 .. R8]
+      (reverse [R1 .. R8])
       rows
 
 piecesByColor :: Color -> Board -> [(Coordinate, Piece)]
@@ -95,7 +96,7 @@ updateBoard :: Coordinate -> Square -> Board -> Board
 updateBoard (Coordinate f r) sq (Board rows) =
   let updatedRow =
         updateRowAt
-          (fromEnum r)
+          (7 - fromEnum r)
           (\(Row squares) -> Row $ updateAtIndex (fromEnum f) sq squares)
           rows
    in Board updatedRow
@@ -210,26 +211,10 @@ reachableCoordinates pos coord move = case stepCoordinate' pos coord move of
   Nothing -> []
 
 fileIndex :: File -> Int
-fileIndex f = case f of
-  A -> 0
-  B -> 1
-  C -> 2
-  D -> 3
-  E -> 4
-  F -> 5
-  G -> 6
-  H -> 7
+fileIndex = fromEnum
 
 rankIndex :: Rank -> Int
-rankIndex r = case r of
-  R1 -> 0
-  R2 -> 1
-  R3 -> 2
-  R4 -> 3
-  R5 -> 4
-  R6 -> 5
-  R7 -> 6
-  R8 -> 7
+rankIndex r = 7 - fromEnum r
 
 squareAt :: Board -> Coordinate -> Square
 squareAt (Board rows) (Coordinate f r) = case rows !! rankIndex r of
@@ -240,6 +225,11 @@ isSquareEmpty b c = squareAt b c == Empty
 
 isSquareOccupied :: Board -> Coordinate -> Bool
 isSquareOccupied b c = not $ isSquareEmpty b c
+
+canCapture :: Board -> Color -> Coordinate -> Bool
+canCapture b color coord = case squareAt b coord of
+  Occupied color' _ -> color /= color'
+  Empty -> False
 
 canMoveOrCapture :: Board -> Color -> Coordinate -> Bool
 canMoveOrCapture b color coord = case squareAt b coord of
