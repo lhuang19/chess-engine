@@ -98,10 +98,10 @@ data Position = Position
   deriving (Show, Eq)
 
 data Game
-  = Start
+  = Start {position :: Position} -- games can start in the middle if position is loaded
   | Game
       { position :: Position,
-        lastMove :: Maybe Move,
+        prevMove :: Move,
         prev :: Game
       }
   deriving (Show, Eq)

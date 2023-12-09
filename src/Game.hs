@@ -11,23 +11,19 @@ import Text.Printf (printf)
 import Util
 
 -- Define a newtype for your state
-newtype GameState a = GameState { runGameState :: StateT Position IO a }
-  deriving (Functor, Applicative, Monad, MonadState Position, MonadIO)
+newtype GameState a = GameState { runGameState :: StateT Game IO a }
+  deriving (Functor, Applicative, Monad, MonadState Game, MonadIO)
 
--- Define a custom lift function to lift IO actions into the GameState monad
 liftIOInGame :: IO a -> GameState a
 liftIOInGame = liftIO
 
--- Modify the gameLoop function to use the StateT monad
 gameLoop :: IO ()
-gameLoop = evalStateT (runGameState gameLoopState) startingPosition
+gameLoop = evalStateT (runGameState gameLoopState) (Start startingPosition)
 
--- Define the actual gameLoop logic in the StateT monad
 gameLoopState :: GameState ()
 gameLoopState = do
-  liftIOInGame $ putStrLn "Type FEN at any time to get current FEN"
-  liftIOInGame $ putStrLn "Type LOAD to load a FEN"
-  liftIOInGame $ putStrLn $ pretty startingPosition
+  help
+  printPos
   go
 
 restart :: GameState ()
@@ -38,45 +34,86 @@ restart = do
 
 go :: GameState ()
 go = do
-  pos <- get
+  curr <- get
+  let pos = position curr
   let colorText = show $ turn pos
   liftIOInGame $ putStrLn $ printf "Enter %s's move (e.g., 'pe2e4'):" colorText
   input <- liftIOInGame getLine
-  if input == "FEN"
-    then do
-      liftIOInGame $ putStrLn $ "Current FEN: " ++ FENParser.posToFEN pos
-      go
-    else
-      if input == "LOAD"
-        then do
-          fen <- promptForFEN
-          handleNewPos fen
-        else case parseMove input of
-          Right move -> do
-            case makeMove pos move of
-              Left errMsg -> do
-                liftIOInGame $ putStrLn $ "Invalid move: " ++ errMsg
-                go
-              Right newPos -> do
-                handleNewPos newPos
-          Left error -> do
-            liftIOInGame $ putStrLn $ "Invalid input. Please enter a valid move. " ++ error
+  case input of
+    c
+      | c `elem` [":help", ":h"] -> do
+        help
+        go
+      | c `elem` [":undo", ":u"] -> do
+        case curr of
+          Start _ -> do
+            liftIOInGame $ putStrLn "Cannot undo from start position."
             go
+          Game _ _ prev -> do
+            put prev
+            printPos
+            go
+      | c `elem` [":fen", ":f"] -> do
+            liftIOInGame $ putStrLn $ "Current FEN: " ++ FENParser.posToFEN pos
+            go
+      | c `elem` [":load", ":l"] -> do
+            loadFEN
+            go
+      | otherwise -> do
+          case parseMove input of
+            Right move -> do
+              case makeMove pos move of
+                Left errMsg -> do
+                  liftIOInGame $ putStrLn $ "Invalid move: " ++ errMsg
+                  go
+                Right newPos -> do
+                  handleNewPos newPos move
+            Left error -> do
+              liftIOInGame $ putStrLn $ "Invalid input. Please enter a valid move. " ++ error
+              go
 
-promptForFEN :: GameState Position
-promptForFEN = do
-  liftIOInGame $ putStrLn "Enter FEN:"
+help :: GameState ()
+help = do
+  liftIOInGame $ putStrLn "Commands:"
+  liftIOInGame $ putStrLn ":fen :f - get current FEN"
+  liftIOInGame $ putStrLn ":load :l - load a FEN"
+  liftIOInGame $ putStrLn ":undo :u - undo last move"
+  liftIOInGame $ putStrLn ":help :h - show this help message"
+
+printPos :: GameState ()
+printPos = do
+  curr <- get
+  case curr of
+    Start pos -> do
+      liftIOInGame $ putStrLn $ pretty pos
+    Game pos _ _ -> do
+      liftIOInGame $ putStrLn $ pretty pos
+
+loadFEN :: GameState ()
+loadFEN = do
+  liftIOInGame $ putStrLn "Enter FEN (or q to go back):"
   fen <- liftIOInGame getLine
-  case FENParser.parseFEN fen of
-    Right pos -> return pos
-    Left error -> do
-      liftIOInGame $ putStrLn $ "Invalid FEN. Please enter a valid FEN: " ++ error
-      promptForFEN
+  case fen of
+    "q" -> do
+      liftIOInGame $ putStrLn "Going back..."
+    _ ->
+      case FENParser.parseFEN fen of
+        Right pos -> do
+          liftIOInGame $ putStrLn $ pretty pos
+          put $ Start pos
+        Left error -> do
+          liftIOInGame $ putStrLn $ "Invalid FEN. Please enter a valid FEN: " ++ error
+          loadFEN
 
-handleNewPos :: Position -> GameState ()
-handleNewPos newPos = do
+handleNewPos :: Position -> Move -> GameState ()
+handleNewPos newPos move = do
   liftIOInGame $ putStrLn $ pretty newPos
-  put newPos
+  curr <- get
+  case curr of
+    Start currPos -> do
+      put $ Game newPos move curr
+    Game _ _ prev -> do
+      put $ Game newPos move curr
   case gameCondition newPos of
     Checkmate -> do
       liftIOInGame $ putStrLn $ printf "Checkmate! %s wins." (show $ flipColor $ turn newPos)
