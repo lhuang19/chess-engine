@@ -30,7 +30,7 @@ incrementPruneCount depth = do
   let currentCount = Map.findWithDefault 0 depth currentMap
   let updatedMap = Map.insert depth (currentCount + 1) currentMap
   modify (\(x, y) -> (x, updatedMap))
-  when (currentCount + 1 `mod` 100000 == 0)
+  when ((currentCount + 1) `mod` 100000 == 0)
     $ liftIO
     $ putStrLn
     $ "Positions pruned at depth " ++ show depth ++ ": " ++ show currentCount
@@ -51,19 +51,32 @@ runEvalCount action = do
 
 data Evaluation
   = BlackMateIn Int [Move]
-  | Eval Double
+  | Eval Double (Maybe Move)
   | WhiteMateIn Int [Move]
   deriving (Show, Eq)
 
 eval :: Evaluation -> Double
 eval (BlackMateIn x _) = -1000.0 + fromIntegral x
-eval (Eval x) = x
+eval (Eval x _) = x
 eval (WhiteMateIn x _) = 1000.0 - fromIntegral x
+
+evaluationToMove :: Evaluation -> Maybe Move
+evaluationToMove (BlackMateIn _ (x: _)) = Just x
+evaluationToMove (Eval _ m) = m
+evaluationToMove (WhiteMateIn _ (x: _)) = Just x
+evaluationToMove _ = Nothing
+
+evaluationToMoveExn :: Evaluation -> Move
+evaluationToMoveExn (BlackMateIn _ (x: _)) = x
+evaluationToMoveExn (Eval _ (Just m)) = m
+evaluationToMoveExn (WhiteMateIn _ (x: _)) = x
+evaluationToMoveExn e = error $ "No move on exn" ++ show e
 
 instance Ord Evaluation where
   compare (BlackMateIn x _) (BlackMateIn y _) = compare y x
   compare (WhiteMateIn x _) (WhiteMateIn y _) = compare y x
-  compare (Eval x) (Eval y) = compare x y
+  -- Can try to see if we prefer some piece moves over others
+  compare (Eval x _) (Eval y _) = compare x y
   compare (BlackMateIn _ _) _ = LT
   compare _ (BlackMateIn _ _) = GT
   compare (WhiteMateIn _ _) _ = GT
@@ -72,80 +85,90 @@ instance Ord Evaluation where
   max w1@(WhiteMateIn x1 _) w2@(WhiteMateIn x2 _) = if x1 > x2 then w2 else w1
   max w@(WhiteMateIn _ _) _ = w
   max _ w@(WhiteMateIn _ _) = w
-  max (Eval x) (Eval y) = Eval $ max x y
-  max (Eval x) _ = Eval x
-  max _ (Eval y) = Eval y
+  max e1@(Eval x _) e2@(Eval y _) = if x > y then e1 else e2
+  max e@(Eval x _) _ = e
+  max _ e@(Eval y _) = e
   max b1@(BlackMateIn x1 _) b2@(BlackMateIn x2 _) = if x1 > x2 then b1 else b2
 
   min b1@(BlackMateIn x1 _) b2@(BlackMateIn x2 _) = if x1 > x2 then b2 else b1
   min b@(BlackMateIn _ _) _ = b
   min _ b@(BlackMateIn _ _) = b
-  min (Eval x) (Eval y) = Eval $ min x y
-  min (Eval x) _ = Eval x
-  min _ (Eval y) = Eval y
+  min e1@(Eval x _) e2@(Eval y _) = if x > y then e2 else e1
+  min e@(Eval x _) _ = e
+  min _ (Eval y e) = Eval y e
   min w1@(WhiteMateIn x1 _) w2@(WhiteMateIn x2 _) = if x1 > x2 then w1 else w2
 
 updateEvaluation :: Evaluation -> Move -> Evaluation
 updateEvaluation (BlackMateIn x xs) m = BlackMateIn (x + 1) (m: xs)
-updateEvaluation (Eval x) _ = Eval x
+updateEvaluation e@(Eval x _) m = Eval x (Just m)
 updateEvaluation (WhiteMateIn x xs) m = WhiteMateIn (x + 1) (m: xs)
 
-minimaxAlphaBeta :: Int -> Double -> Double -> Position -> (Evaluation, Move) -> EvalCountState Evaluation
+-- runs minimax with alpha-beta pruning and returns a list of top 5 evaluations
+minimaxAlphaBeta :: Int -> Double -> Double -> Position -> (Evaluation, Maybe Move) -> EvalCountState [Evaluation]
 minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
   case isTerminalEvaluation pos of
-    Just e -> return e
+    Just e -> return [e]
     Nothing -> do
       if depth == 0
         then do
             incrementEvalCount
-            return $ fastEvaluate e' pos m'
-            -- return $ evaluate pos
+            case m' of
+              Just m -> return [fastEvaluate e' pos m]
+              Nothing -> return [evaluate pos]
         else if t == White
         then do
           case children of
             [] -> error "should have terminated"
             ((xMove, xPos) : xs) -> do
-              e <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+              es <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+              let e = head es
               let updatedNextEval = updateEvaluation e xMove
               foldr (\(childMove, childPos) acc -> do
-                e <- acc
+                es <- acc
+                let e = head es
                 if eval e >= beta || eval updatedNextEval >= beta
                   then do
                     incrementPruneCount depth
-                    return e -- Prune
+                    return es -- Prune
                   else do
-                    nextEval <- minimaxAlphaBeta (depth - 1) (max alpha (eval e)) beta childPos (e', childMove)
+                    nextEvals <- minimaxAlphaBeta (depth - 1) (max alpha (eval e)) beta childPos (e', Just childMove)
+                    let nextEval = head nextEvals
                     let updatedNextEval = updateEvaluation nextEval childMove
-                    return (max updatedNextEval e)
-                ) (return $ updatedNextEval) xs
+                    -- Keep a sorted list of top 5 evaluations
+                    return $ take 5 $ sortBy (flip compare) (updatedNextEval : es)
+                ) (return [updatedNextEval]) xs
         else do
           case children of
             [] -> error "should have terminated"
             ((xMove, xPos) : xs) -> do
-              e <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+              es <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+              let e = head es
               let updatedNextEval = updateEvaluation e xMove
               foldr (\(childMove, childPos) acc -> do
-                e <- acc
+                es <- acc
+                let e = head es
                 if eval e <= alpha
                   then do
                     incrementPruneCount depth
-                    return e -- Prune
+                    return es -- Prune
                   else do
-                    nextEval <- minimaxAlphaBeta (depth - 1) alpha (min beta (eval e)) childPos (e', childMove)
+                    nextEvals <- minimaxAlphaBeta (depth - 1) alpha (min beta (eval e)) childPos (e', Just childMove)
+                    let nextEval = head nextEvals
                     let updatedNextEval = updateEvaluation nextEval childMove
-                    return (min updatedNextEval e)
-                ) (return $ updatedNextEval) xs
+                    -- Keep a sorted list of top 5 evaluations
+                    return $ take 5 $ sortBy compare (updatedNextEval : es)
+                ) (return [updatedNextEval]) xs
   where
     children = validMoves pos
 
     isTerminalEvaluation :: Position -> Maybe Evaluation
     isTerminalEvaluation pos@(Position _ t _ _ halfMove fullMove)
-      | halfMove >= 100 || fullMove >= 500 = Just $ Eval 0
+      | halfMove >= 100 || fullMove >= 500 = Just $ Eval 0 Nothing
       | otherwise = case gameCondition pos of
         Checkmate -> case t of
           White -> Just $ BlackMateIn 0 []
           Black -> Just $ WhiteMateIn 0 []
-        Stalemate -> Just $ Eval 0
+        Stalemate -> Just $ Eval 0 Nothing
         _ -> Nothing
 
 pieceValue :: Piece -> Double
@@ -162,8 +185,8 @@ evaluate pos@(Position (Board rows) _ _ _ _ _) = do
     Checkmate -> case turn pos of
       White -> BlackMateIn 0 []
       Black -> WhiteMateIn 0 []
-    Stalemate -> Eval 0
-    _ -> Eval $ sum $ map countPieceValue (concatMap (\(Row squares) -> squares) rows)
+    Stalemate -> Eval 0 Nothing
+    _ -> Eval (sum $ map (\(Row xs) -> sum $ map countPieceValue xs) rows) Nothing
   where
     countPieceValue :: Square -> Double
     countPieceValue (Occupied color piece) =
@@ -175,48 +198,60 @@ evaluate pos@(Position (Board rows) _ _ _ _ _) = do
 fastEvaluate :: Evaluation -> Position -> Move -> Evaluation
 fastEvaluate (BlackMateIn x xs) _ m = BlackMateIn (x + 1) (m: xs)
 fastEvaluate (WhiteMateIn x xs) _ m = WhiteMateIn (x + 1) (m: xs)
-fastEvaluate (Eval x) pos m =
+fastEvaluate (Eval x _) pos m =
   case m of
-    StdMove (StandardMove _ _ _) -> Eval x
-    CastMove _ -> Eval x
+    StdMove (StandardMove _ _ _) -> Eval x (Just m)
+    CastMove _ -> Eval x (Just m)
     PromMove (Promotion _ to piece) ->
       case squareAt (board pos) to of
             Occupied _ piece' ->
               if turn pos == White
-                then Eval $ pieceValue piece + pieceValue piece' - pieceValue Pawn
-                else Eval $ -pieceValue piece -pieceValue piece' + pieceValue Pawn
+                then Eval (pieceValue piece + pieceValue piece' - pieceValue Pawn) (Just m)
+                else Eval (-pieceValue piece - pieceValue piece' + pieceValue Pawn) (Just m)
             Empty ->
               if turn pos == White
-                then Eval $ pieceValue piece - pieceValue Pawn
-              else Eval $ -pieceValue piece + pieceValue Pawn
+                then Eval (pieceValue piece - pieceValue Pawn) (Just m)
+                else Eval (-pieceValue piece + pieceValue Pawn) (Just m)
 
-evalFunc :: Int -> (Move, Position) -> EvalCountState Evaluation
-evalFunc depth (m, p) = minimaxAlphaBeta (depth - 1) (-1 / 0) (1 / 0) p (evaluate p, m)
-
+-- use new minimax alphabeta that already returns a sorted list
 findBestMove' :: Position -> Int -> EvalCountState (Move, Evaluation)
 findBestMove' pos depth = do
-  evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
-  let compareFunc (_, e1) (_, e2) = compare e1 e2
-  case turn pos of
-    White -> do
-      let ((m, _), e) = maximumBy compareFunc evaledMoves
-      return (m, updateEvaluation e m)
-    Black -> do
-      let ((m, _), e) = minimumBy compareFunc evaledMoves
-      return (m, updateEvaluation e m)
+  es <- minimaxAlphaBeta depth (-1 / 0) (1 / 0) pos (evaluate pos, Nothing)
+  let e = head es
+  return (evaluationToMoveExn e, e)
 
 findBestMoveN' :: Position -> Int -> Int -> EvalCountState [(Move, Evaluation)]
 findBestMoveN' pos depth n = do
-  evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
-  let compareFunc (_, e1) (_, e2) = compare e1 e2
-  let valueFunc (_, e) = e
-  case turn pos of
-    White -> do
-      let sorted = sortOn (Down . valueFunc) evaledMoves
-      return $ take n $ map (\((m, _), e) -> (m, updateEvaluation e m)) sorted
-    Black -> do
-      let sorted = sortOn valueFunc evaledMoves
-      return $ take n $ map (\((m, _), e) -> (m, updateEvaluation e m)) sorted
+  es <- minimaxAlphaBeta depth (-1 / 0) (1 / 0) pos (evaluate pos, Nothing)
+  return $ map (\e -> (evaluationToMoveExn e, e)) $ take n es
+
+-- evalFunc :: Int -> (Move, Position) -> EvalCountState Evaluation
+-- evalFunc depth (m, p) = minimaxAlphaBeta (depth - 1) (-1 / 0) (1 / 0) p (evaluate p, m)
+
+-- findBestMove' :: Position -> Int -> EvalCountState (Move, Evaluation)
+-- findBestMove' pos depth = do
+--   evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
+--   let compareFunc (_, e1) (_, e2) = compare e1 e2
+--   case turn pos of
+--     White -> do
+--       let ((m, _), e) = maximumBy compareFunc evaledMoves
+--       return (m, updateEvaluation e m)
+--     Black -> do
+--       let ((m, _), e) = minimumBy compareFunc evaledMoves
+--       return (m, updateEvaluation e m)
+
+-- findBestMoveN' :: Position -> Int -> Int -> EvalCountState [(Move, Evaluation)]
+-- findBestMoveN' pos depth n = do
+--   evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
+--   let compareFunc (_, e1) (_, e2) = compare e1 e2
+--   let valueFunc (_, e) = e
+--   case turn pos of
+--     White -> do
+--       let sorted = sortOn (Down . valueFunc) evaledMoves
+--       return $ take n $ map (\((m, _), e) -> (m, updateEvaluation e m)) sorted
+--     Black -> do
+--       let sorted = sortOn valueFunc evaledMoves
+--       return $ take n $ map (\((m, _), e) -> (m, updateEvaluation e m)) sorted
 
 -- Run the state monad to track the number of positions evaluated
 findBestMove :: Position -> Int -> IO (Move, Evaluation)

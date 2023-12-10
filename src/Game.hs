@@ -44,23 +44,28 @@ go = do
   let pos = position curr
   let colorText = show $ turn pos
   if isAiModeActive curr then do
+
     liftIOInGame $ putStrLn $ printf "AI is thinking... (this may take a while)"
-    moves <- liftIOInGame $ findBestMoveN pos 5 10
+    moves <- liftIOInGame $ findBestMoveN pos 6 5
     let (move, eval) = head moves
     liftIOInGame $ putStrLn $ "Best Moves: " ++ show moves
+
     case makeMove pos move of
       Left errMsg -> error $ "AI made invalid move (exiting): " ++ errMsg
       Right newPos -> do
         liftIOInGame $ putStrLn $ "AI played: " ++ show move ++ " with evaluation " ++ show eval
         handleNewPos newPos move
+
   else do
     liftIOInGame $ putStrLn $ printf "Enter %s's move (e.g., 'pe2e4'):" colorText
     input <- liftIOInGame getLine
+
     case words $ padInput input of
       [c, arg]
         | c `elem` [":help", ":h"] -> do
           help
           go
+
         | c `elem` [":undo", ":u"] -> do
           case curr of
             Start _ _ -> do
@@ -70,20 +75,24 @@ go = do
               put prev
               printPos
               go
+
         | c `elem` [":fen", ":f"] -> do
               liftIOInGame $ putStrLn $ "Current FEN: " ++ FENParser.posToFEN pos
               go
+
         | c `elem` [":load", ":l"] -> do
               loadFEN
               go
+
         | c `elem` [":evaluate", ":e"] -> do
               let depth = readMaybe arg :: Maybe Int
-              let defaultDepth = 5 -- Set your default depth here
+              let defaultDepth = 6 -- Set your default depth here
               let evalDepth = fromMaybe defaultDepth depth
               liftIOInGame $ putStrLn $ "Evaluating position to depth " ++ show evalDepth
               moves <- liftIOInGame $ findBestMoveN pos evalDepth 10
               liftIOInGame $ putStrLn $ "Best Moves: " ++ show moves
               go
+
         | c `elem` [":ai", ":a"] -> do
               case arg of
                 "w" -> do
@@ -97,6 +106,7 @@ go = do
                 _ -> do
                   liftIOInGame $ putStrLn "Invalid color. Please enter a valid color (w or b)."
                   go
+
         | otherwise -> do
             case parseMove input of
               Right move -> do
@@ -109,9 +119,11 @@ go = do
               Left error -> do
                 liftIOInGame $ putStrLn $ "Invalid input. Please enter a valid move. " ++ error
                 go
+
       _ -> do
         liftIOInGame $ putStrLn "Invalid input. Please enter a valid move."
         go
+
    where
      padInput :: String -> String
      padInput input = if length (words input) < 2 then
@@ -125,9 +137,9 @@ help = do
   liftIOInGame $ putStrLn ":f :fen - get current FEN"
   liftIOInGame $ putStrLn ":l :load - load a FEN"
   liftIOInGame $ putStrLn ":u :undo - undo last move"
-  liftIOInGame $ putStrLn ":e :evaluate <depth> - evaluate current position at depth <depth> default 5"
+  liftIOInGame $ putStrLn ":e :evaluate <depth> - evaluate current position at depth <depth> default 6"
   liftIOInGame $ putStrLn ":a :ai <color> - AI will play for <color> (w or b)"
-  liftIOInGame $ putStrLn ":ad <depth> - AI will play at depth <depth> default 5"
+  liftIOInGame $ putStrLn ":ad <depth> - AI will play at depth <depth> default 6"
   liftIOInGame $ putStrLn ":h :help - print this help message"
 
 printPos :: GameState ()
