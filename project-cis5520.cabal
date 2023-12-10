@@ -50,6 +50,7 @@ library
       Syntax
       Util
       Game
+      Engine
   hs-source-dirs:
       src
 

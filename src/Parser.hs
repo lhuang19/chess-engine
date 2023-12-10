@@ -39,6 +39,7 @@ module Parser
     sepBy1,
     sepBy,
     optional,
+    failP
   )
 where
 
@@ -54,7 +55,7 @@ import Text.Read (readMaybe)
 import Prelude hiding (filter)
 
 -- definition of the parser type
-newtype Parser a = P {doParse :: String -> Maybe (a, String)}
+newtype Parser a = P {doParse :: String -> Either ParseError (a, String)}
 
 instance Functor Parser where
   fmap :: (a -> b) -> Parser a -> Parser b
@@ -64,7 +65,7 @@ instance Functor Parser where
 
 instance Applicative Parser where
   pure :: a -> Parser a
-  pure x = P $ \s -> Just (x, s)
+  pure x = P $ \s -> Right (x, s)
 
   (<*>) :: Parser (a -> b) -> Parser a -> Parser b
   p1 <*> p2 = P $ \s -> do
@@ -74,10 +75,17 @@ instance Applicative Parser where
 
 instance Alternative Parser where
   empty :: Parser a
-  empty = P $ const Nothing
+  empty = P $ const $ Left "empty"
 
   (<|>) :: Parser a -> Parser a -> Parser a
-  p1 <|> p2 = P $ \s -> doParse p1 s `firstJust` doParse p2 s
+  p1 <|> p2 = P $ \s -> case doParse p1 s of
+    Left err -> case doParse p2 s of
+      Left err' -> case (err, err') of
+        ("", _) -> Left err'
+        (_, "") -> Left err
+        _ -> Left (err ++ ", " ++ err')
+      Right x -> Right x
+    Right x -> Right x
 
 -- | Combine two Maybe values together, producing the first
 -- successful result
@@ -88,26 +96,28 @@ firstJust Nothing y = y
 -- | Return the next character from the input
 get :: Parser Char
 get = P $ \s -> case s of
-  (c : cs) -> Just (c, cs)
-  [] -> Nothing
+  (c : cs) -> Right (c, cs)
+  [] -> Left "empty"
 
 -- | Return the next character from the input without consuming it
 peek :: Parser Char
 peek = P $ \s -> case s of
-  (c : cs) -> Just (c, c : cs)
-  [] -> Nothing
+  (c : cs) -> Right (c, c : cs)
+  [] -> Left "empty"
 
 -- | This parser *only* succeeds at the end of the input.
 eof :: Parser ()
 eof = P $ \s -> case s of
-  [] -> Just ((), [])
-  _ : _ -> Nothing
+  [] -> Right ((), [])
+  _ : _ -> Left "not eof"
 
 -- | Filter the parsing results by a predicate
 filter :: (a -> Bool) -> Parser a -> Parser a
 filter f p = P $ \s -> do
   (c, cs) <- doParse p s
-  guard (f c)
+  if f c
+    then Right (c, cs)
+    else Left ""
   return (c, cs)
 
 ---------------------------------------------------------------
@@ -121,8 +131,8 @@ type ParseError = String
 -- give it a type similar to other Parsing libraries.
 parse :: Parser a -> String -> Either ParseError a
 parse parser str = case doParse parser str of
-  Nothing -> Left "No parses"
-  Just (a, _) -> Right a
+  Left err -> Left err
+  Right (a, _) -> Right a
 
 -- | parseFromFile p filePath runs a string parser p on the input
 -- read from filePath using readFile. Returns either a
@@ -221,3 +231,6 @@ sepBy1 p sep = (:) <$> p <*> many (sep *> p)
 
 optional :: Parser a -> Parser (Maybe a)
 optional p = Just <$> p <|> pure Nothing
+
+failP :: String -> Parser a
+failP errorMessage = P $ const (Left errorMessage)

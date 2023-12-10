@@ -16,8 +16,10 @@ module Syntax
     Promotion (..),
     Move (..),
     Game (..),
+    GameStateOptions (..),
     GameCondition (..),
     startingPosition,
+    isAiModeActive,
   )
 where
 
@@ -97,12 +99,33 @@ data Position = Position
   }
   deriving (Show, Eq)
 
+data GameStateOptions = GameStateOptions
+  { aiModeWhite :: Bool
+  , aiModeBlack :: Bool
+  }
+  deriving (Show, Eq)
+
+isAiModeActive :: Game -> Bool
+isAiModeActive (Start pos options) =
+  case turn pos of
+    White -> aiModeWhite options
+    Black -> aiModeBlack options
+isAiModeActive (Game pos _ _ options) =
+  case turn pos of
+    White -> aiModeWhite options
+    Black -> aiModeBlack options
+
 data Game
-  = Start {position :: Position} -- games can start in the middle if position is loaded
+  = Start
+      {
+        position :: Position,
+        options :: GameStateOptions
+      } -- games can start in the middle if position is loaded
   | Game
       { position :: Position,
         prevMove :: Move,
-        prev :: Game
+        prev :: Game,
+        options :: GameStateOptions
       }
   deriving (Show, Eq)
 

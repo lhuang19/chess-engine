@@ -44,18 +44,19 @@ promotableP :: Parser Piece
 promotableP = knightP <|> bishopP <|> rookP <|> queenP
 
 pieceP :: Parser Piece
-pieceP = unpromotableP <|> promotableP
+pieceP = unpromotableP <|> promotableP <|> P.failP "Invalid piece"
 
 colorPeekP :: Parser Color
-colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha'
+colorPeekP = (\c -> if Char.isUpper c then White else Black) <$> P.alpha' <|> P.failP "Invalid color"
 
 emptySquaresP :: Parser [Square]
 emptySquaresP =
   (`replicate` Empty)
     <$> P.filter (\n -> n <= 8 && n >= 1) P.int
+    <|> P.failP "Invalid number of empty squares"
 
 occupiedSquareP :: Parser Square
-occupiedSquareP = Occupied <$> colorPeekP <*> pieceP
+occupiedSquareP = Occupied <$> colorPeekP <*> pieceP <|> P.failP "Invalid occupied square"
 
 fileP :: Parser File
 fileP =

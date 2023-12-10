@@ -5,6 +5,7 @@ import Control.Applicative
 import Data.Char qualified as Char
 import Data.Functor (($>))
 import Data.List qualified as List
+import Data.Either (isLeft)
 import Moves
 import Parser (Parser)
 import Parser qualified as P
@@ -15,11 +16,11 @@ import Util
 
 -- | parsers
 rowP :: Parser Row
-rowP =
-  Row
-    <$> P.filter
-      (\xs -> List.length xs == 8)
-      (concat <$> many (emptySquaresP <|> (List.singleton <$> occupiedSquareP)))
+rowP = 
+    P.filter
+      (\(Row xs) -> List.length xs == 8)
+      (Row . concat <$> many (emptySquaresP <|> (List.singleton <$> occupiedSquareP)))
+    <|> P.failP "Invalid row length"
 
 boardP :: Parser Board
 boardP =
@@ -27,9 +28,10 @@ boardP =
     <$> P.filter
       (\xs -> List.length xs == 8)
       (P.sepBy1 rowP (P.char '/'))
+    <|> P.failP "Invalid board length"
 
 turnP :: Parser Color
-turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' || c == 'b') P.alpha
+turnP = (\c -> if c == 'w' then White else Black) <$> P.filter (\c -> c == 'w' || c == 'b') P.alpha <|> P.failP "Invalid turn"
 
 castlingP :: Parser Castling
 castlingP =
@@ -51,6 +53,7 @@ castlingP =
       P.string "q" $> Castling False False False True,
       P.string "-" $> Castling False False False False
     ]
+    <|> P.failP "Invalid castling"
 
 enPassantP :: Parser (Maybe Coordinate)
 enPassantP =
@@ -58,12 +61,13 @@ enPassantP =
     [ constP "-" Nothing,
       Just <$> coordinateP
     ]
+    <|> P.failP "Invalid en passant"
 
 halfMoveClockP :: Parser Int
-halfMoveClockP = P.filter (>= 0) P.int
+halfMoveClockP = P.filter (>= 0) P.int <|> P.failP "Invalid half move clock"
 
 fullMoveNumberP :: Parser Int
-fullMoveNumberP = P.filter (>= 1) P.int
+fullMoveNumberP = P.filter (>= 0) P.int <|> P.failP "Invalid full move number"
 
 fenP :: Parser Position
 fenP =
@@ -163,7 +167,7 @@ test_piece =
     TestList
       [ P.parse (many pieceP) "pnbrqk" ~?= Right [Pawn, Knight, Bishop, Rook, Queen, King],
         P.parse pieceP "P" ~?= Right Pawn,
-        P.parse pieceP "a" ~?= Left "No parses"
+        P.parse pieceP "a" ~?= Left "Invalid piece"
       ]
 
 test_colorPeek :: Test
@@ -180,8 +184,8 @@ test_emptySquares =
     TestList
       [ P.parse emptySquaresP "1" ~?= Right [Empty],
         P.parse emptySquaresP "8" ~?= Right [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty],
-        P.parse emptySquaresP "0" ~?= Left "No parses",
-        P.parse emptySquaresP "9" ~?= Left "No parses"
+        P.parse emptySquaresP "9" ~?= Left "Invalid number of empty squares",
+        P.parse emptySquaresP "0" ~?= Left "Invalid number of empty squares"
       ]
 
 test_occupiedSquare :: Test
@@ -225,7 +229,7 @@ test_row =
                   Empty
                 ]
             ),
-        P.parse rowP "3p5" ~?= Left "No parses",
+        P.parse rowP "3p5" ~?= Left "Invalid row length",
         P.parse rowP "k3pPn1"
           ~?= Right
             ( Row
@@ -239,7 +243,7 @@ test_row =
                   Empty
                 ]
             ),
-        P.parse rowP "." ~?= Left "No parses"
+        P.parse rowP "a" ~?= Left "No parses"
       ]
 
 test_board :: Test
@@ -302,9 +306,9 @@ test_fullMoveNumber :: Test
 test_fullMoveNumber =
   "parsing fullMoveNumber" ~:
     TestList
-      [ P.parse fullMoveNumberP "1" ~?= Right 1,
+      [ P.parse fullMoveNumberP "0" ~?= Right 0,
         P.parse fullMoveNumberP "a" ~?= Left "No parses",
-        P.parse fullMoveNumberP "0" ~?= Left "No parses"
+        P.parse fullMoveNumberP "-1" ~?= Left "No parses"
       ]
 
 test_parseFEN :: Test
