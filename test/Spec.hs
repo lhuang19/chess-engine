@@ -1,4 +1,5 @@
 import Control.Monad (unless)
+import Engine qualified
 import FENParser qualified
 import Lib
 import MoveParser qualified
@@ -23,8 +24,11 @@ main = do
   putStrLn "Testing Move Parser"
   moveParserUnitResults <- MoveParser.test_all
 
+  putStrLn "Testing Engine"
+  engineQCResults <- Engine.qc
+
   let unitResults = [fenUnitResults, moveUnitResults, moveParserUnitResults]
-  let qcResults = fenQCResults ++ moveQCResults
+  let qcResults = concat [fenQCResults, moveQCResults, engineQCResults]
 
   unless (all testsPassed unitResults && all isSuccess qcResults) exitFailure
 
