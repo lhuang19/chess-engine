@@ -150,101 +150,110 @@ pieceValue King = 200
 
 evaluate :: Position -> Evaluation
 evaluate pos@(Position board _ _ _ _ _) = do
+  let color = turn pos
   case gameCondition pos of
-    Checkmate -> case turn pos of
+    Checkmate -> case color of
       White -> BlackMateIn 0 []
       Black -> WhiteMateIn 0 []
     Stalemate -> Eval 0
     FiftyMoveDraw -> Eval 0
-    _ -> Eval $ sum $ map (countPieceValueWithBonus board) (annotatedBoard board)
+    _ -> Eval $ sum $ map (countPieceValueWithBonus color board) (piecesByColor color board)
   where
-    countPieceValueWithBonus :: Board -> (Coordinate, Square) -> Double
-    countPieceValueWithBonus _ (coord, Occupied color piece) =
+    countPieceValueWithBonus :: Color -> Board -> (Coordinate, Piece) -> Double
+    countPieceValueWithBonus color _ (coord, piece) =
       let baseValue = case color of
             White -> pieceValue piece
             Black -> -pieceValue piece
        in let bonus = case piece of
-                Pawn -> pawnPositionBonus coord
-                Knight -> knightPositionBonus coord
-                Bishop -> bishopPositionBonus coord
-                Rook -> rookPositionBonus coord
-                Queen -> queenPositionBonus coord
-                King -> kingPositionBonus coord
+                Pawn -> pawnPositionBonus color coord
+                Knight -> knightPositionBonus color coord
+                Bishop -> bishopPositionBonus color coord
+                Rook -> rookPositionBonus color coord
+                Queen -> queenPositionBonus color coord
+                King -> kingPositionBonus color coord
            in baseValue + bonus * (if color == White then 1 else -1)
-    countPieceValueWithBonus _ (_, Empty) = 0
 
-    pawnPositionBonus :: Coordinate -> Double
-    pawnPositionBonus (Coordinate file rank) =
-      let table =
-            [ [0, 0, 0, 0, 0, 0, 0, 0],
-              [50, 50, 50, 50, 50, 50, 50, 50],
-              [10, 10, 20, 30, 30, 20, 10, 10],
-              [5, 5, 10, 25, 25, 10, 5, 5],
-              [0, 0, 0, 20, 20, 0, 0, 0],
-              [5, -5, -10, 0, 0, -10, -5, 5],
-              [5, 10, 10, -20, -20, 10, 10, 5],
-              [0, 0, 0, 0, 0, 0, 0, 0]
-            ]
-       in table !! rankIndex rank !! fileIndex file / 100.0
+    maybeTransRank :: Color -> Int -> Int
+    maybeTransRank White r = r
+    maybeTransRank Black r = 7 - r
 
-    knightPositionBonus :: Coordinate -> Double
-    knightPositionBonus (Coordinate file rank) =
-      let table =
-            [ [-50, -40, -30, -30, -30, -30, -40, -50],
-              [-40, -20, 0, 0, 0, 0, -20, -40],
-              [-30, 0, 10, 15, 15, 10, 0, -30],
-              [-30, 5, 15, 20, 20, 15, 5, -30],
-              [-30, 0, 15, 20, 20, 15, 0, -30],
-              [-30, 5, 10, 15, 15, 10, 5, -30],
-              [-40, -20, 0, 5, 5, 0, -20, -40],
-              [-50, -40, -30, -30, -30, -30, -40, -50]
-            ]
-       in table !! rankIndex rank !! fileIndex file / 100.0
+    pawnPositionBonus :: Color -> Coordinate -> Double
+    pawnPositionBonus color (Coordinate file rank) =
+      let rankI = maybeTransRank color $ rankIndex rank
+       in let table =
+                [ [0, 0, 0, 0, 0, 0, 0, 0],
+                  [50, 50, 50, 50, 50, 50, 50, 50],
+                  [10, 10, 20, 30, 30, 20, 10, 10],
+                  [5, 5, 10, 25, 25, 10, 5, 5],
+                  [0, 0, 0, 20, 20, 0, 0, 0],
+                  [5, -5, -10, 0, 0, -10, -5, 5],
+                  [5, 10, 10, -20, -20, 10, 10, 5],
+                  [0, 0, 0, 0, 0, 0, 0, 0]
+                ]
+           in table !! rankI !! fileIndex file / 100.0
 
-    bishopPositionBonus :: Coordinate -> Double
-    bishopPositionBonus (Coordinate file rank) =
-      let table =
-            [ [-20, -10, -10, -10, -10, -10, -10, -20],
-              [-10, 0, 0, 0, 0, 0, 0, -10],
-              [-10, 0, 5, 10, 10, 5, 0, -10],
-              [-10, 5, 5, 10, 10, 5, 5, -10],
-              [-10, 0, 10, 10, 10, 10, 0, -10],
-              [-10, 10, 10, 10, 10, 10, 10, -10],
-              [-10, 5, 0, 0, 0, 0, 5, -10],
-              [-20, -10, -10, -10, -10, -10, -10, -20]
-            ]
-       in table !! rankIndex rank !! fileIndex file / 100.0
+    knightPositionBonus :: Color -> Coordinate -> Double
+    knightPositionBonus color (Coordinate file rank) =
+      let rankI = maybeTransRank color $ rankIndex rank
+       in let table =
+                [ [-50, -40, -30, -30, -30, -30, -40, -50],
+                  [-40, -20, 0, 0, 0, 0, -20, -40],
+                  [-30, 0, 10, 15, 15, 10, 0, -30],
+                  [-30, 5, 15, 20, 20, 15, 5, -30],
+                  [-30, 0, 15, 20, 20, 15, 0, -30],
+                  [-30, 5, 10, 15, 15, 10, 5, -30],
+                  [-40, -20, 0, 5, 5, 0, -20, -40],
+                  [-50, -40, -30, -30, -30, -30, -40, -50]
+                ]
+           in table !! rankI !! fileIndex file / 100.0
 
-    rookPositionBonus :: Coordinate -> Double
-    rookPositionBonus (Coordinate file rank) =
-      let table =
-            [ [0, 0, 0, 0, 0, 0, 0, 0],
-              [5, 10, 10, 10, 10, 10, 10, 5],
-              [-5, 0, 0, 0, 0, 0, 0, -5],
-              [-5, 0, 0, 0, 0, 0, 0, -5],
-              [-5, 0, 0, 0, 0, 0, 0, -5],
-              [-5, 0, 0, 0, 0, 0, 0, -5],
-              [-5, 0, 0, 0, 0, 0, 0, -5],
-              [0, 0, 0, 5, 5, 0, 0, 0]
-            ]
-       in table !! rankIndex rank !! fileIndex file / 100.0
+    bishopPositionBonus :: Color -> Coordinate -> Double
+    bishopPositionBonus color (Coordinate file rank) =
+      let rankI = maybeTransRank color $ rankIndex rank
+       in let table =
+                [ [-20, -10, -10, -10, -10, -10, -10, -20],
+                  [-10, 0, 0, 0, 0, 0, 0, -10],
+                  [-10, 0, 5, 10, 10, 5, 0, -10],
+                  [-10, 5, 5, 10, 10, 5, 5, -10],
+                  [-10, 0, 10, 10, 10, 10, 0, -10],
+                  [-10, 10, 10, 10, 10, 10, 10, -10],
+                  [-10, 5, 0, 0, 0, 0, 5, -10],
+                  [-20, -10, -10, -10, -10, -10, -10, -20]
+                ]
+           in table !! rankI !! fileIndex file / 100.0
 
-    queenPositionBonus :: Coordinate -> Double
-    queenPositionBonus (Coordinate file rank) =
-      let table =
-            [ [-20, -10, -10, -5, -5, -10, -10, -20],
-              [-10, 0, 0, 0, 0, 0, 0, -10],
-              [-10, 0, 5, 5, 5, 5, 0, -10],
-              [-5, 0, 5, 5, 5, 5, 0, -5],
-              [0, 0, 5, 5, 5, 5, 0, -5],
-              [-10, 5, 5, 5, 5, 5, 0, -10],
-              [-10, 0, 5, 0, 0, 0, 0, -10],
-              [-20, -10, -10, -5, -5, -10, -10, -20]
-            ]
-       in table !! rankIndex rank !! fileIndex file / 100.0
+    rookPositionBonus :: Color -> Coordinate -> Double
+    rookPositionBonus color (Coordinate file rank) =
+      let rankI = maybeTransRank color $ rankIndex rank
+       in let table =
+                [ [0, 0, 0, 0, 0, 0, 0, 0],
+                  [5, 10, 10, 10, 10, 10, 10, 5],
+                  [-5, 0, 0, 0, 0, 0, 0, -5],
+                  [-5, 0, 0, 0, 0, 0, 0, -5],
+                  [-5, 0, 0, 0, 0, 0, 0, -5],
+                  [-5, 0, 0, 0, 0, 0, 0, -5],
+                  [-5, 0, 0, 0, 0, 0, 0, -5],
+                  [0, 0, 0, 5, 5, 0, 0, 0]
+                ]
+           in table !! rankI !! fileIndex file / 100.0
 
-    kingPositionBonus :: Coordinate -> Double
-    kingPositionBonus (Coordinate file rank) =
+    queenPositionBonus :: Color -> Coordinate -> Double
+    queenPositionBonus color (Coordinate file rank) =
+      let rankI = maybeTransRank color $ rankIndex rank
+       in let table =
+                [ [-20, -10, -10, -5, -5, -10, -10, -20],
+                  [-10, 0, 0, 0, 0, 0, 0, -10],
+                  [-10, 0, 5, 5, 5, 5, 0, -10],
+                  [-5, 0, 5, 5, 5, 5, 0, -5],
+                  [0, 0, 5, 5, 5, 5, 0, -5],
+                  [-10, 5, 5, 5, 5, 5, 0, -10],
+                  [-10, 0, 5, 0, 0, 0, 0, -10],
+                  [-20, -10, -10, -5, -5, -10, -10, -20]
+                ]
+           in table !! rankI !! fileIndex file / 100.0
+
+    kingPositionBonus :: Color -> Coordinate -> Double
+    kingPositionBonus color (Coordinate file rank) =
       let table =
             [ [-30, -40, -40, -50, -50, -40, -40, -30],
               [-30, -40, -40, -50, -50, -40, -40, -30],
@@ -350,13 +359,16 @@ shuffle gen xs = go gen (length xs - 1) xs
     replace n x lst = take n lst ++ [x] ++ drop (n + 1) lst
 
 prop_depthEval :: Position -> Property
-prop_depthEval pos = forAll (choose (2, 3)) $ \depth -> monadicIO $ do
-  (move, eval) <- run $ findBestMove pos depth
-  case makeMove pos move of
-    Left errMsg -> return $ property (discard :: Property)
-    Right newPos -> do
-      (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
-      return $ property $ eval == shallowerEval
+prop_depthEval pos =
+  if null $ validMoves pos
+    then property (discard :: Property)
+    else forAll (choose (2, 3)) $ \depth -> monadicIO $ do
+      (move, eval) <- run $ findBestMove pos depth
+      case makeMove pos move of
+        Left errMsg -> return $ property (discard :: Property)
+        Right newPos -> do
+          (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
+          return $ property $ eval == shallowerEval
 
 qc :: IO [Result]
 qc =
