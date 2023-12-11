@@ -280,7 +280,8 @@ evalFunc depth (m, p) = minimaxAlphaBeta (depth - 1) (Eval $ -1 / 0) (Eval $ 1 /
 
 findBestMove' :: Position -> Int -> EvalCountState (Move, Evaluation)
 findBestMove' pos depth = do
-  evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
+  let shuffledMoves = fst $ shuffle (mkStdGen 42) $ validMoves pos
+  evaledMoves <- mapZipM (evalFunc depth) shuffledMoves
   let compareFunc (_, e1) (_, e2) = compare e1 e2
   case turn pos of
     White -> do
