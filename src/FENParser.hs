@@ -3,9 +3,9 @@ module FENParser where
 import CommonParser
 import Control.Applicative
 import Data.Char qualified as Char
+import Data.Either (isLeft)
 import Data.Functor (($>))
 import Data.List qualified as List
-import Data.Either (isLeft)
 import Moves
 import Parser (Parser)
 import Parser qualified as P
@@ -16,10 +16,10 @@ import Util
 
 -- | parsers
 rowP :: Parser Row
-rowP = 
-    P.filter
-      (\(Row xs) -> List.length xs == 8)
-      (Row . concat <$> many (emptySquaresP <|> (List.singleton <$> occupiedSquareP)))
+rowP =
+  P.filter
+    (\(Row xs) -> List.length xs == 8)
+    (Row . concat <$> many (emptySquaresP <|> (List.singleton <$> occupiedSquareP)))
     <|> P.failP "Invalid row length"
 
 boardP :: Parser Board
@@ -243,7 +243,7 @@ test_row =
                   Empty
                 ]
             ),
-        P.parse rowP "a" ~?= Left "No parses"
+        P.parse rowP "a" ~?= Left "Invalid row length"
       ]
 
 test_board :: Test
@@ -263,7 +263,7 @@ test_board =
                   Row [Empty, Empty, Empty, Empty, Empty, Empty, Empty, Empty]
                 ]
             ),
-        P.parse boardP "7K/P1p1p1p1/2P1P1Pk/6pP/3p2P1/1P6/3P4/8/8" ~?= Left "No parses"
+        P.parse boardP "7K/P1p1p1p1/2P1P1Pk/6pP/3p2P1/1P6/3P4/8/8" ~?= Left "Invalid board length"
       ]
 
 test_turn :: Test

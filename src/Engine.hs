@@ -7,7 +7,6 @@ module Engine
   )
 where
 
-import System.Random
 import Control.Monad (liftM, when)
 import Control.Monad.State
 import Data.List (maximumBy, minimumBy, sortBy, sortOn)
@@ -15,7 +14,9 @@ import Data.Map.Strict qualified as Map
 import Data.Ord (Down (..), comparing)
 import Moves
 import Syntax
+import System.Random
 import Test.QuickCheck (Arbitrary (..), Gen, Property, Result, choose, counterexample, discard, elements, forAll, isSuccess, oneof, property, quickCheck, quickCheckResult, (==>))
+import Test.QuickCheck.Monadic
 import Util
 
 type EvalCountState a = StateT (Int, Map.Map Int Int) IO a
@@ -81,7 +82,6 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
           incrementEvalCount
           return $ evaluate pos
         else
-
           if t == White
             then do
               case children of
@@ -97,7 +97,7 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
                             incrementPruneCount depth
                             return e -- Prune
                           else do
-                            nextEval <- minimaxAlphaBeta (depth - 1) (max alpha e) beta childPos 
+                            nextEval <- minimaxAlphaBeta (depth - 1) (max alpha e) beta childPos
                             let updatedNextEval = updateEvaluation nextEval childMove
                             return (max updatedNextEval e)
                     )
@@ -117,7 +117,7 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
                             incrementPruneCount depth
                             return e -- Prune
                           else do
-                            nextEval <- minimaxAlphaBeta (depth - 1) alpha (min beta e) childPos 
+                            nextEval <- minimaxAlphaBeta (depth - 1) alpha (min beta e) childPos
                             let updatedNextEval = updateEvaluation nextEval childMove
                             return (min updatedNextEval e)
                     )
@@ -128,7 +128,7 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
     children =
       let gen = mkStdGen 42 -- You can replace 42 with any seed value
           (shuffledMoves, _) = shuffle gen $ validMoves pos
-      in shuffledMoves
+       in shuffledMoves
 
     isTerminalEvaluation :: Position -> Maybe Evaluation
     isTerminalEvaluation pos@(Position _ t _ _ halfMove fullMove)
@@ -170,7 +170,7 @@ evaluate pos@(Position board _ _ _ _ _) = do
                 Rook -> rookPositionBonus coord
                 Queen -> queenPositionBonus coord
                 King -> kingPositionBonus coord
-           in baseValue + bonus
+           in baseValue + bonus * (if color == White then 1 else -1)
     countPieceValueWithBonus _ (_, Empty) = 0
 
     pawnPositionBonus :: Coordinate -> Double
@@ -333,22 +333,28 @@ sortOnM f list = do
   zipped <- mapZipM f list
   return $ map fst $ sortOn snd zipped
 
-shuffle :: RandomGen g => g -> [a] -> ([a], g)
+shuffle :: (RandomGen g) => g -> [a] -> ([a], g)
 shuffle gen [] = ([], gen)
 shuffle gen xs = go gen (length xs - 1) xs
   where
-    go g 0 lst = (lst, g)  -- Return the entire list
+    go g 0 lst = (lst, g) -- Return the entire list
     go g i lst =
       let (j, g') = randomR (0, i) g
           ith = lst !! i
           jth = lst !! j
           lst' = replace i jth $ replace j ith lst
-      in go g' (i - 1) lst'
+       in go g' (i - 1) lst'
 
     replace n x lst = take n lst ++ [x] ++ drop (n + 1) lst
 
-prop_depthEval :: Position -> Bool
-prop_depthEval pos = undefined
+prop_depthEval :: Position -> Property
+prop_depthEval pos = forAll (choose (2, 3)) $ \depth -> monadicIO $ do
+  (move, eval) <- run $ findBestMove pos depth
+  newPos <- case makeMove pos move of
+    Left errMsg -> fail errMsg -- Fails the test if there is an error
+    Right newPos -> return newPos
+  (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
+  return $ property $ eval == shallowerEval
 
 qc :: IO [Result]
 qc =
