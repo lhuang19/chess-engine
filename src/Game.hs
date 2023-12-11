@@ -45,7 +45,7 @@ go = do
   let colorText = show $ turn pos
   if isAiModeActive curr then do
     liftIOInGame $ putStrLn $ printf "AI is thinking... (this may take a while)"
-    moves <- liftIOInGame $ findBestMoveN pos 5 10
+    moves <- liftIOInGame $ findBestMoveN pos 4 10
     let (move, eval) = head moves
     liftIOInGame $ putStrLn $ "Best Moves: " ++ show moves
     case makeMove pos move of
