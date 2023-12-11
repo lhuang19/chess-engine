@@ -7,6 +7,7 @@ module Engine
 
 where
 
+import System.Random
 import Data.List (maximumBy, minimumBy, sortOn, sortBy)
 import Data.Ord (comparing, Down(..))
 import qualified Data.Map.Strict as Map
@@ -159,7 +160,16 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
                     return $ take 5 $ sortBy compare (updatedNextEval : es)
                 ) (return [updatedNextEval]) xs
   where
-    children = validMoves pos
+    children :: [(Move, Position)]
+    children =
+      let gen = mkStdGen 42 -- You can replace 42 with any seed value
+          (shuffledMoves, _) = shuffle gen $ validMoves pos
+      in shuffledMoves
+    -- children :: [(Move, Position)]
+    -- children = do
+    --   gen <- getStdGen
+    --   let (shuffledMoves, _) = shuffle gen $ validMoves pos
+    --   return shuffledMoves
 
     isTerminalEvaluation :: Position -> Maybe Evaluation
     isTerminalEvaluation pos@(Position _ t _ _ halfMove fullMove)
@@ -282,3 +292,17 @@ sortOnM :: (Ord b, Monad m) => (a -> m b) -> [a] -> m [a]
 sortOnM f list = do
   zipped <- mapZipM f list
   return $ map fst $ sortOn snd zipped
+
+shuffle :: RandomGen g => g -> [a] -> ([a], g)
+shuffle gen [] = ([], gen)
+shuffle gen xs = go gen (length xs - 1) xs
+  where
+    go g 0 lst = (lst, g)  -- Return the entire list
+    go g i lst =
+      let (j, g') = randomR (0, i) g
+          ith = lst !! i
+          jth = lst !! j
+          lst' = replace i jth $ replace j ith lst
+      in go g' (i - 1) lst'
+
+    replace n x lst = take n lst ++ [x] ++ drop (n + 1) lst
