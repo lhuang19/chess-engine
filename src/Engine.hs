@@ -141,28 +141,121 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
           _ -> Nothing
 
 pieceValue :: Piece -> Double
-pieceValue Pawn = 1.0
-pieceValue Knight = 3.0
-pieceValue Bishop = 3.25
+pieceValue Pawn = 1
+pieceValue Knight = 3.2
+pieceValue Bishop = 3.3
 pieceValue Rook = 5.0
-pieceValue Queen = 9.0
-pieceValue King = 1000.0 -- Assign a high value to the king for checkmate detection
+pieceValue Queen = 9
+pieceValue King = 200
 
 evaluate :: Position -> Evaluation
-evaluate pos@(Position (Board rows) _ _ _ _ _) = do
+evaluate pos@(Position board _ _ _ _ _) = do
   case gameCondition pos of
     Checkmate -> case turn pos of
       White -> BlackMateIn 0 []
       Black -> WhiteMateIn 0 []
     Stalemate -> Eval 0
-    _ -> Eval $ sum $ map countPieceValue (concatMap (\(Row squares) -> squares) rows)
+    FiftyMoveDraw -> Eval 0
+    _ -> Eval $ sum $ map (countPieceValueWithBonus board) (annotatedBoard board)
   where
-    countPieceValue :: Square -> Double
-    countPieceValue (Occupied color piece) =
-      case color of
-        White -> pieceValue piece
-        Black -> -pieceValue piece
-    countPieceValue Empty = 0
+    countPieceValueWithBonus :: Board -> (Coordinate, Square) -> Double
+    countPieceValueWithBonus _ (coord, Occupied color piece) =
+      let baseValue = case color of
+            White -> pieceValue piece
+            Black -> -pieceValue piece
+       in let bonus = case piece of
+                Pawn -> pawnPositionBonus coord
+                Knight -> knightPositionBonus coord
+                Bishop -> bishopPositionBonus coord
+                Rook -> rookPositionBonus coord
+                Queen -> queenPositionBonus coord
+                King -> kingPositionBonus coord
+           in baseValue + bonus
+    countPieceValueWithBonus _ (_, Empty) = 0
+
+    pawnPositionBonus :: Coordinate -> Double
+    pawnPositionBonus (Coordinate file rank) =
+      let table =
+            [ [0, 0, 0, 0, 0, 0, 0, 0],
+              [50, 50, 50, 50, 50, 50, 50, 50],
+              [10, 10, 20, 30, 30, 20, 10, 10],
+              [5, 5, 10, 25, 25, 10, 5, 5],
+              [0, 0, 0, 20, 20, 0, 0, 0],
+              [5, -5, -10, 0, 0, -10, -5, 5],
+              [5, 10, 10, -20, -20, 10, 10, 5],
+              [0, 0, 0, 0, 0, 0, 0, 0]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
+
+    knightPositionBonus :: Coordinate -> Double
+    knightPositionBonus (Coordinate file rank) =
+      let table =
+            [ [-50, -40, -30, -30, -30, -30, -40, -50],
+              [-40, -20, 0, 0, 0, 0, -20, -40],
+              [-30, 0, 10, 15, 15, 10, 0, -30],
+              [-30, 5, 15, 20, 20, 15, 5, -30],
+              [-30, 0, 15, 20, 20, 15, 0, -30],
+              [-30, 5, 10, 15, 15, 10, 5, -30],
+              [-40, -20, 0, 5, 5, 0, -20, -40],
+              [-50, -40, -30, -30, -30, -30, -40, -50]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
+
+    bishopPositionBonus :: Coordinate -> Double
+    bishopPositionBonus (Coordinate file rank) =
+      let table =
+            [ [-20, -10, -10, -10, -10, -10, -10, -20],
+              [-10, 0, 0, 0, 0, 0, 0, -10],
+              [-10, 0, 5, 10, 10, 5, 0, -10],
+              [-10, 5, 5, 10, 10, 5, 5, -10],
+              [-10, 0, 10, 10, 10, 10, 0, -10],
+              [-10, 10, 10, 10, 10, 10, 10, -10],
+              [-10, 5, 0, 0, 0, 0, 5, -10],
+              [-20, -10, -10, -10, -10, -10, -10, -20]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
+
+    rookPositionBonus :: Coordinate -> Double
+    rookPositionBonus (Coordinate file rank) =
+      let table =
+            [ [0, 0, 0, 0, 0, 0, 0, 0],
+              [5, 10, 10, 10, 10, 10, 10, 5],
+              [-5, 0, 0, 0, 0, 0, 0, -5],
+              [-5, 0, 0, 0, 0, 0, 0, -5],
+              [-5, 0, 0, 0, 0, 0, 0, -5],
+              [-5, 0, 0, 0, 0, 0, 0, -5],
+              [-5, 0, 0, 0, 0, 0, 0, -5],
+              [0, 0, 0, 5, 5, 0, 0, 0]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
+
+    queenPositionBonus :: Coordinate -> Double
+    queenPositionBonus (Coordinate file rank) =
+      let table =
+            [ [-20, -10, -10, -5, -5, -10, -10, -20],
+              [-10, 0, 0, 0, 0, 0, 0, -10],
+              [-10, 0, 5, 5, 5, 5, 0, -10],
+              [-5, 0, 5, 5, 5, 5, 0, -5],
+              [0, 0, 5, 5, 5, 5, 0, -5],
+              [-10, 5, 5, 5, 5, 5, 0, -10],
+              [-10, 0, 5, 0, 0, 0, 0, -10],
+              [-20, -10, -10, -5, -5, -10, -10, -20]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
+
+    kingPositionBonus :: Coordinate -> Double
+    kingPositionBonus (Coordinate file rank) =
+      let table =
+            [ [-30, -40, -40, -50, -50, -40, -40, -30],
+              [-30, -40, -40, -50, -50, -40, -40, -30],
+              [-30, -40, -40, -50, -50, -40, -40, -30],
+              [-30, -40, -40, -50, -50, -40, -40, -30],
+              [-20, -30, -30, -40, -40, -30, -30, -20],
+              [-10, -20, -20, -20, -20, -20, -20, -10],
+              [20, 20, 0, 0, 0, 0, 20, 20],
+              [20, 30, 10, 0, 0, 10, 30, 20]
+            ]
+       in table !! rankIndex rank !! fileIndex file / 100.0
 
 fastEvaluate :: Evaluation -> Position -> Move -> Evaluation
 fastEvaluate (BlackMateIn x xs) _ m = BlackMateIn (x + 1) (m : xs)
