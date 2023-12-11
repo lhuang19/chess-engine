@@ -7,6 +7,7 @@ module Engine
   )
 where
 
+import System.Random
 import Control.Monad (liftM, when)
 import Control.Monad.State
 import Data.List (maximumBy, minimumBy, sortBy, sortOn)
@@ -70,23 +71,23 @@ updateEvaluation (BlackMateIn x xs) m = BlackMateIn (x + 1) (m : xs)
 updateEvaluation (Eval x) _ = Eval x
 updateEvaluation (WhiteMateIn x xs) m = WhiteMateIn (x + 1) (m : xs)
 
-minimaxAlphaBeta :: Int -> Evaluation -> Evaluation -> Position -> (Evaluation, Move) -> EvalCountState Evaluation
-minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
+minimaxAlphaBeta :: Int -> Evaluation -> Evaluation -> Position -> EvalCountState Evaluation
+minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) =
   case isTerminalEvaluation pos of
     Just e -> return e
     Nothing -> do
       if depth == 0
         then do
           incrementEvalCount
-          return $ fastEvaluate e' pos m'
-        else -- return $ evaluate pos
+          return $ evaluate pos
+        else
 
           if t == White
             then do
               case children of
                 [] -> error "should have terminated"
                 ((xMove, xPos) : xs) -> do
-                  e <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+                  e <- minimaxAlphaBeta (depth - 1) alpha beta xPos
                   let updatedNextEval = updateEvaluation e xMove
                   foldr
                     ( \(childMove, childPos) acc -> do
@@ -96,7 +97,7 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
                             incrementPruneCount depth
                             return e -- Prune
                           else do
-                            nextEval <- minimaxAlphaBeta (depth - 1) (max alpha e) beta childPos (e', childMove)
+                            nextEval <- minimaxAlphaBeta (depth - 1) (max alpha e) beta childPos 
                             let updatedNextEval = updateEvaluation nextEval childMove
                             return (max updatedNextEval e)
                     )
@@ -106,7 +107,7 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
               case children of
                 [] -> error "should have terminated"
                 ((xMove, xPos) : xs) -> do
-                  e <- minimaxAlphaBeta (depth - 1) alpha beta xPos (e', m')
+                  e <- minimaxAlphaBeta (depth - 1) alpha beta xPos
                   let updatedNextEval = updateEvaluation e xMove
                   foldr
                     ( \(childMove, childPos) acc -> do
@@ -116,14 +117,18 @@ minimaxAlphaBeta depth alpha beta pos@(Position _ t _ _ _ _) (e', m') =
                             incrementPruneCount depth
                             return e -- Prune
                           else do
-                            nextEval <- minimaxAlphaBeta (depth - 1) alpha (min beta e) childPos (e', childMove)
+                            nextEval <- minimaxAlphaBeta (depth - 1) alpha (min beta e) childPos 
                             let updatedNextEval = updateEvaluation nextEval childMove
                             return (min updatedNextEval e)
                     )
                     (return updatedNextEval)
                     xs
   where
-    children = validMoves pos
+    children :: [(Move, Position)]
+    children =
+      let gen = mkStdGen 42 -- You can replace 42 with any seed value
+          (shuffledMoves, _) = shuffle gen $ validMoves pos
+      in shuffledMoves
 
     isTerminalEvaluation :: Position -> Maybe Evaluation
     isTerminalEvaluation pos@(Position _ t _ _ halfMove fullMove)
@@ -178,7 +183,7 @@ fastEvaluate (Eval x) pos m =
             else Eval $ -pieceValue piece + pieceValue Pawn
 
 evalFunc :: Int -> (Move, Position) -> EvalCountState Evaluation
-evalFunc depth (m, p) = minimaxAlphaBeta (depth - 1) (Eval $ -1 / 0) (Eval $ 1 / 0) p (evaluate p, m)
+evalFunc depth (m, p) = minimaxAlphaBeta (depth - 1) (Eval $ -1 / 0) (Eval $ 1 / 0) p
 
 findBestMove' :: Position -> Int -> EvalCountState (Move, Evaluation)
 findBestMove' pos depth = do
@@ -234,6 +239,20 @@ sortOnM :: (Ord b, Monad m) => (a -> m b) -> [a] -> m [a]
 sortOnM f list = do
   zipped <- mapZipM f list
   return $ map fst $ sortOn snd zipped
+
+shuffle :: RandomGen g => g -> [a] -> ([a], g)
+shuffle gen [] = ([], gen)
+shuffle gen xs = go gen (length xs - 1) xs
+  where
+    go g 0 lst = (lst, g)  -- Return the entire list
+    go g i lst =
+      let (j, g') = randomR (0, i) g
+          ith = lst !! i
+          jth = lst !! j
+          lst' = replace i jth $ replace j ith lst
+      in go g' (i - 1) lst'
+
+    replace n x lst = take n lst ++ [x] ++ drop (n + 1) lst
 
 prop_depthEval :: Position -> Bool
 prop_depthEval pos = undefined
