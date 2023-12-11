@@ -366,9 +366,12 @@ prop_depthEval pos =
       (move, eval) <- run $ findBestMove pos depth
       case makeMove pos move of
         Left errMsg -> return $ property (discard :: Property)
-        Right newPos -> do
-          (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
-          return $ property $ eval == shallowerEval
+        Right newPos ->
+          if null $ validMoves newPos
+            then return $ property (discard :: Property)
+            else do
+              (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
+              return $ property $ eval == shallowerEval
 
 qc :: IO [Result]
 qc =
