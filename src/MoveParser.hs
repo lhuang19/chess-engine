@@ -50,7 +50,7 @@ test_standardMove =
         P.parse standardMoveP "Rg1g8" ~?= Right (StandardMove Rook (Coordinate G R1) (Coordinate G R8)),
         P.parse standardMoveP "Qd1h5" ~?= Right (StandardMove Queen (Coordinate D R1) (Coordinate H R5)),
         P.parse standardMoveP "Ke1e2" ~?= Right (StandardMove King (Coordinate E R1) (Coordinate E R2)),
-        P.parse standardMoveP "pe2e4a" ~?= Left "No parses"
+        P.parse standardMoveP "pe2e4a" ~?= Left "not eof"
       ]
 
 test_castle :: Test
@@ -59,7 +59,7 @@ test_castle =
     TestList
       [ P.parse castleP "O-O" ~?= Right Kingside,
         P.parse castleP "O-O-O" ~?= Right Queenside,
-        P.parse castleP "O-O-Oa" ~?= Left "No parses"
+        P.parse castleP "O-O-Oa" ~?= Left "not eof, not eof"
       ]
 
 test_promotion :: Test
@@ -70,7 +70,7 @@ test_promotion =
         P.parse promotionP "pe7e8=n" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Knight),
         P.parse promotionP "pe7e8=b" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Bishop),
         P.parse promotionP "pe7e8=r" ~?= Right (Promotion (Coordinate E R7) (Coordinate E R8) Rook),
-        P.parse promotionP "pe7e8=k" ~?= Left "No parses"
+        P.parse promotionP "pe7e8=k" ~?= Left ""
       ]
 
 test_all :: IO Counts

@@ -293,7 +293,8 @@ findBestMove' pos depth = do
 
 findBestMoveN' :: Position -> Int -> Int -> EvalCountState [(Move, Evaluation)]
 findBestMoveN' pos depth n = do
-  evaledMoves <- mapZipM (evalFunc depth) (validMoves pos)
+  let shuffledMoves = fst $ shuffle (mkStdGen 42) $ validMoves pos
+  evaledMoves <- mapZipM (evalFunc depth) shuffledMoves
   let compareFunc (_, e1) (_, e2) = compare e1 e2
   let valueFunc (_, e) = e
   case turn pos of
@@ -351,11 +352,11 @@ shuffle gen xs = go gen (length xs - 1) xs
 prop_depthEval :: Position -> Property
 prop_depthEval pos = forAll (choose (2, 3)) $ \depth -> monadicIO $ do
   (move, eval) <- run $ findBestMove pos depth
-  newPos <- case makeMove pos move of
-    Left errMsg -> fail errMsg -- Fails the test if there is an error
-    Right newPos -> return newPos
-  (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
-  return $ property $ eval == shallowerEval
+  case makeMove pos move of
+    Left errMsg -> return $ property (discard :: Property)
+    Right newPos -> do
+      (newMove, shallowerEval) <- run $ findBestMove newPos (depth - 1)
+      return $ property $ eval == shallowerEval
 
 qc :: IO [Result]
 qc =

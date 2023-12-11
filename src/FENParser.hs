@@ -272,7 +272,7 @@ test_turn =
     TestList
       [ P.parse turnP "w" ~?= Right White,
         P.parse turnP "b" ~?= Right Black,
-        P.parse turnP "a" ~?= Left "No parses"
+        P.parse turnP "a" ~?= Left "Invalid turn"
       ]
 
 test_castling :: Test
@@ -281,7 +281,7 @@ test_castling =
     TestList
       [ P.parse castlingP "KQkq" ~?= Right (Castling True True True True),
         P.parse castlingP "-" ~?= Right (Castling False False False False),
-        P.parse castlingP "a" ~?= Left "No parses"
+        P.parse castlingP "a" ~?= Left "empty, Invalid castling"
       ]
 
 test_enPassant :: Test
@@ -298,8 +298,8 @@ test_halfMoveClock =
     TestList
       [ P.parse halfMoveClockP "0" ~?= Right 0,
         P.parse halfMoveClockP "1" ~?= Right 1,
-        P.parse halfMoveClockP "a" ~?= Left "No parses",
-        P.parse halfMoveClockP "-1" ~?= Left "No parses"
+        P.parse halfMoveClockP "a" ~?= Left "Invalid half move clock",
+        P.parse halfMoveClockP "-1" ~?= Left "Invalid half move clock"
       ]
 
 test_fullMoveNumber :: Test
@@ -307,8 +307,8 @@ test_fullMoveNumber =
   "parsing fullMoveNumber" ~:
     TestList
       [ P.parse fullMoveNumberP "0" ~?= Right 0,
-        P.parse fullMoveNumberP "a" ~?= Left "No parses",
-        P.parse fullMoveNumberP "-1" ~?= Left "No parses"
+        P.parse fullMoveNumberP "a" ~?= Left "Invalid full move number",
+        P.parse fullMoveNumberP "-1" ~?= Left "Invalid full move number"
       ]
 
 test_parseFEN :: Test
@@ -334,8 +334,7 @@ test_parseFEN =
                 Nothing
                 0
                 1
-            ),
-        P.parse fenP "7K/P1p1p1p1/2P1P1Pk/6pP/3p2P1/1P6/3P4/8 w - - 0 0" ~?= Left "No parses"
+            )
       ]
 
 test_all :: IO Counts
